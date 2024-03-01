@@ -62,7 +62,24 @@
 запросы и ответы со стороны сервиса для **всех** его операций.
 
 #### Демонстрация работы
-todo
+1. Добавление нового продукта
+  ![create](./images/create.png)
+
+2. Получение продукта по его id
+  ![show](./images/show.png)
+  ![show](./images/show-not-found.png)
+
+3. Обновление существующего продукта
+  ![update](./images/update.png)
+  ![update](./images/show-after-update.png)
+
+4. Удаление продукта по его id
+  ![delete](./images/delete.png)
+  ![delete](./images/delete-failed.png)
+  ![delete](./images/delete-failed-2.png)
+
+5. Получение списка всех продуктов
+  ![index](./images/index.png)
 
 ### Задание В (4 балла)
 Пусть ваш продукт также имеет иконку (небольшую картинку). Формат иконки (картинки) может
