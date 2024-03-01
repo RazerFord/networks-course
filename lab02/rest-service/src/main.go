@@ -8,6 +8,7 @@ import (
 
 func main() {
 	router := gin.Default()
+	
 	router.POST("/product", controllers.PostProduct)
 	router.GET("/product/:id", controllers.GetProduct)
 	router.PUT("/product/:id", controllers.PutProduct)

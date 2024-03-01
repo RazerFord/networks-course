@@ -22,6 +22,16 @@ func parseErrors(err error) []string {
 	return []string{err.Error()}
 }
 
+func existsProductByPointerId(id *int) bool {
+	if id == nil {
+		return false
+	} else if p := storage.GetProduct(*id); p != nil {
+		return true
+	} else {
+		return false
+	}
+}
+
 func getProductById(id string) (*model.Product, int, error) {
 	if idn, err := strconv.Atoi(id); err != nil {
 		return nil, http.StatusBadRequest, errors.New("wrong id format")
