@@ -101,7 +101,12 @@
 ```
 
 #### Демонстрация работы
-todo
+1. Загрузка иконки:
+  ![create-test-icon](./images/create-test-icon.png)
+  ![upload-icon](./images/upload-icon.png)
+
+2. Получение иконки:
+  ![download-icon](./images/download-icon.png)
 
 ---
 
