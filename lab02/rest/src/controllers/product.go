@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"fmt"
 	"mime/multipart"
 	"net/http"
 	"rest/src/model"
