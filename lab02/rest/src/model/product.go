@@ -2,6 +2,7 @@ package model
 
 type QProduct struct {
 	Name        string `json:"name" binding:"required"`
+	Icon        string `json:"icon" binding:"required"`
 	Description string `json:"description" binding:"required"`
 }
 
@@ -10,8 +11,8 @@ type Product struct {
 	QProduct
 }
 
-func NewProduct(id int, name, description string) *Product {
-	return &Product{id, QProduct{name, description}}
+func NewProduct(id int, name, image, description string) *Product {
+	return &Product{id, QProduct{name, image, description}}
 }
 
 type Products struct {

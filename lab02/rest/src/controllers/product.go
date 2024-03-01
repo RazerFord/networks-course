@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"fmt"
+	"mime/multipart"
 	"net/http"
 	"rest/src/model"
 	"rest/src/storage"
@@ -73,4 +75,42 @@ func DeleteProduct(ctx *gin.Context) {
 
 func GetProducts(ctx *gin.Context) {
 	ctx.IndentedJSON(http.StatusOK, storage.GetProducts())
+}
+
+func UploadImageProduct(ctx *gin.Context) {
+	id := ctx.Param("id")
+
+	var p *model.Product
+	var f *multipart.FileHeader
+	var s int
+	var err error
+
+	if p, s, err = getProductById(id); err != nil {
+		ctx.IndentedJSON(s, gin.H{"error": err.Error()})
+		return
+	} else if f, err = ctx.FormFile("icon"); err != nil {
+		ctx.IndentedJSON(s, gin.H{"error": err.Error()})
+		return
+	}
+
+	dst := storage.Images + f.Filename
+	err = ctx.SaveUploadedFile(f, dst)
+
+	if err != nil {
+		ctx.IndentedJSON(http.StatusOK, gin.H{"error": err.Error()})
+	} else {
+		p.Icon = dst
+		ctx.IndentedJSON(http.StatusOK, *p)
+	}
+}
+
+func DownloadImageProduct(ctx *gin.Context) {
+	id := ctx.Param("id")
+
+	if p, s, err := getProductById(id); err != nil {
+		ctx.IndentedJSON(s, gin.H{"error": err.Error()})
+		return
+	} else {
+		ctx.File(p.Icon)
+	}
 }

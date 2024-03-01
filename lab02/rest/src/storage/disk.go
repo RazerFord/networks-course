@@ -9,6 +9,7 @@ import (
 )
 
 const (
+	Images    = "./icons/"
 	database = "./data/data.json"
 	prefix   = ""
 	ident    = "    "
