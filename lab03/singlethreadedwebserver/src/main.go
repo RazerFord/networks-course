@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"io"
 	"log"
 	"net"
@@ -11,7 +12,10 @@ import (
 	"strconv"
 )
 
-var logger = log.Default()
+var (
+	logger       = log.Default()
+	errFileParam = errors.New("file parameter not passed")
+)
 
 const reqParam = "file"
 
@@ -70,22 +74,21 @@ func main() {
 		values := params.Query()
 		file := values.Get(reqParam)
 
-		if !values.Has(reqParam) {
-			logger.Printf("[ ERROR ] %v parameter not found\n", reqParam)
-			tcp.Close()
-			continue
-		} else {
-			logger.Printf("[ INFO ] %v = %v\n", reqParam, file)
-		}
-
-		fbytes, err := os.ReadFile(file)
-
 		resp := http.Response{
 			Proto:      req.Proto,
 			Request:    req,
 			ProtoMajor: req.ProtoMajor,
 			ProtoMinor: req.ProtoMinor,
 			Header:     make(http.Header),
+		}
+
+		fbytes := make([]byte, 0)
+		if !values.Has(reqParam) {
+			logger.Printf("[ ERROR ] %v parameter not found\n", reqParam)
+			err = errFileParam
+		} else {
+			logger.Printf("[ INFO ] %v = %v\n", reqParam, file)
+			fbytes, err = os.ReadFile(file)
 		}
 
 		if os.IsNotExist(err) {
