@@ -147,7 +147,7 @@ func main() {
 		tcp, err := server.AcceptTCP()
 
 		if err != nil {
-			logger.Printf("[ INFO ] accepting error: %v\n", err)
+			logger.Printf("[ ERROR ] accepting error: %v\n", err)
 			continue
 		}
 

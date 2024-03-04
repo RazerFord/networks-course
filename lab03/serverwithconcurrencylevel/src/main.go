@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path"
 	"strconv"
+	"syscall"
 )
 
 var (
@@ -20,7 +22,7 @@ var (
 )
 
 const (
-	DEBUG      = false // set true to enable logging
+	DEBUG      = true // set true to enable logging
 	reqParam   = "file"
 	fileSystem = "filesystem"
 )
@@ -35,19 +37,21 @@ func getPath(p string) string {
 	return path.Join(".", fileSystem, p)
 }
 
-func handleRequest(tcp *net.TCPConn) {
-	reader := bufio.NewReader(tcp)
+func handleRequest(tcp *net.TCPConn, semaphore *chan struct{}) {
+	tid := syscall.Gettid()
 
+	logger.Printf("[ INFO ] thread id: %v\n", tid)
+
+	reader := bufio.NewReader(tcp)
 	req, err := http.ReadRequest(reader)
 
 	if err != nil {
 		logger.Printf("[ ERROR ] %v\n", err)
 		tcp.Close()
 		return
+	} else {
+		logger.Printf("[ INFO ] message read\n")
 	}
-
-	logger.Printf("[ INFO ] message read\n")
-
 	req.Body.Close()
 
 	params, err := req.URL.Parse(req.RequestURI)
@@ -57,7 +61,6 @@ func handleRequest(tcp *net.TCPConn) {
 	}
 
 	values := params.Query()
-
 	file := values.Get(reqParam)
 
 	resp := http.Response{
@@ -111,11 +114,13 @@ func handleRequest(tcp *net.TCPConn) {
 
 	logger.Printf("[ INFO ] response sent successfully: %v\n", resp.ContentLength)
 	tcp.Close()
+	<-*semaphore
+	logger.Printf("[ INFO ] released\n")
 }
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("pass the port")
+	if len(os.Args) < 3 {
+		fmt.Println("pass the port and concurrency level")
 		os.Exit(1)
 	}
 
@@ -123,6 +128,13 @@ func main() {
 
 	if err != nil {
 		fmt.Println("port parsing error")
+		os.Exit(1)
+	}
+
+	level, err := strconv.Atoi(os.Args[2])
+
+	if err != nil {
+		fmt.Println("concurrency level parsing error")
 		os.Exit(1)
 	}
 
@@ -141,6 +153,8 @@ func main() {
 
 	logger.Printf("[ INFO ] server created: http://%v:%v \n", addr.IP, addr.Port)
 
+	semaphore := make(chan struct{}, level)
+	ctx := context.Background()
 	for {
 		tcp, err := server.AcceptTCP()
 
@@ -151,6 +165,14 @@ func main() {
 
 		logger.Printf("[ INFO ] connection accepted\n")
 
-		handleRequest(tcp)
+		semaphore <- struct{}{}
+		logger.Printf("[ INFO ] acquired\n")
+
+		if ctx.Err() != nil {
+			logger.Printf("[ ERROR ] semaphore failed: %v\n", err)
+			continue
+		}
+
+		go handleRequest(tcp, &semaphore)
 	}
 }
