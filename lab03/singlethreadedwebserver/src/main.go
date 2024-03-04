@@ -16,7 +16,6 @@ var logger = log.Default()
 const reqParam = "file"
 
 func main() {
-
 	if len(os.Args) < 2 {
 		panic("pass the port")
 	}
@@ -101,6 +100,7 @@ func main() {
 		resp.Status = http.StatusText(http.StatusAccepted)
 		resp.StatusCode = http.StatusAccepted
 	}
+	resp.Body.Close()
 
 	var byteBuff bytes.Buffer
 	w := bufio.NewWriter(&byteBuff)
