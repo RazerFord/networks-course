@@ -35,6 +35,84 @@ func getPath(p string) string {
 	return path.Join(".", fileSystem, p)
 }
 
+func handleRequest(tcp *net.TCPConn) {
+	reader := bufio.NewReader(tcp)
+
+	req, err := http.ReadRequest(reader)
+
+	if err != nil {
+		logger.Printf("[ ERROR ] %v\n", err)
+		tcp.Close()
+		return
+	}
+
+	logger.Printf("[ INFO ] message read\n")
+
+	req.Body.Close()
+
+	params, err := req.URL.Parse(req.RequestURI)
+
+	if err != nil {
+		logger.Printf("[ ERROR ] %v\n", err)
+	}
+
+	values := params.Query()
+
+	file := values.Get(reqParam)
+
+	resp := http.Response{
+		Proto:      req.Proto,
+		Request:    req,
+		ProtoMajor: req.ProtoMajor,
+		ProtoMinor: req.ProtoMinor,
+		Header:     make(http.Header),
+	}
+
+	fbytes := make([]byte, 0)
+	if !values.Has(reqParam) {
+		logger.Printf("[ ERROR ] %v parameter not found: %v\n", reqParam, err)
+		err = errFileParam
+	} else {
+		logger.Printf("[ INFO ] %v = %v\n", reqParam, file)
+		fbytes, err = os.ReadFile(getPath(file))
+	}
+
+	if os.IsNotExist(err) {
+		logger.Printf("[ ERROR ] file not found: %v\n", err)
+
+		resp.Status = http.StatusText(http.StatusNotFound)
+		resp.StatusCode = http.StatusNotFound
+	} else if err != nil {
+		logger.Printf("[ ERROR ] file opening error: %v\n", err)
+
+		resp.Status = http.StatusText(http.StatusNotFound)
+		resp.StatusCode = http.StatusNotFound
+	} else {
+		resp.Body = io.NopCloser(bytes.NewBuffer(fbytes))
+		resp.ContentLength = int64(len(fbytes))
+		resp.Status = http.StatusText(http.StatusOK)
+		resp.StatusCode = http.StatusOK
+		resp.Body.Close()
+	}
+
+	var byteBuff bytes.Buffer
+	w := bufio.NewWriter(&byteBuff)
+
+	err = resp.Write(w)
+
+	if err != nil {
+		logger.Printf("[ ERROR ] error writing HTTP response: %v\n", err)
+		tcp.Close()
+		return
+	}
+
+	w.Flush()
+	tcp.Write(byteBuff.Bytes())
+
+	logger.Printf("[ INFO ] response sent successfully: %v\n", resp.ContentLength)
+	tcp.Close()
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Println("pass the port")
@@ -73,80 +151,6 @@ func main() {
 
 		logger.Printf("[ INFO ] connection accepted\n")
 
-		reader := bufio.NewReader(tcp)
-
-		req, err := http.ReadRequest(reader)
-
-		if err != nil {
-			logger.Printf("[ ERROR ] %v\n", err)
-			tcp.Close()
-			continue
-		}
-
-		logger.Printf("[ INFO ] message read\n")
-
-		req.Body.Close()
-
-		params, err := req.URL.Parse(req.RequestURI)
-
-		if err != nil {
-			logger.Printf("[ ERROR ] %v\n", err)
-		}
-
-		values := params.Query()
-
-		file := values.Get(reqParam)
-
-		resp := http.Response{
-			Proto:      req.Proto,
-			Request:    req,
-			ProtoMajor: req.ProtoMajor,
-			ProtoMinor: req.ProtoMinor,
-			Header:     make(http.Header),
-		}
-
-		fbytes := make([]byte, 0)
-		if !values.Has(reqParam) {
-			logger.Printf("[ ERROR ] %v parameter not found: %v\n", reqParam, err)
-			err = errFileParam
-		} else {
-			logger.Printf("[ INFO ] %v = %v\n", reqParam, file)
-			fbytes, err = os.ReadFile(getPath(file))
-		}
-
-		if os.IsNotExist(err) {
-			logger.Printf("[ ERROR ] file not found: %v\n", err)
-
-			resp.Status = http.StatusText(http.StatusNotFound)
-			resp.StatusCode = http.StatusNotFound
-		} else if err != nil {
-			logger.Printf("[ ERROR ] file opening error: %v\n", err)
-
-			resp.Status = http.StatusText(http.StatusNotFound)
-			resp.StatusCode = http.StatusNotFound
-		} else {
-			resp.Body = io.NopCloser(bytes.NewBuffer(fbytes))
-			resp.ContentLength = int64(len(fbytes))
-			resp.Status = http.StatusText(http.StatusOK)
-			resp.StatusCode = http.StatusOK
-			resp.Body.Close()
-		}
-
-		var byteBuff bytes.Buffer
-		w := bufio.NewWriter(&byteBuff)
-
-		err = resp.Write(w)
-
-		if err != nil {
-			logger.Printf("[ ERROR ] error writing HTTP response: %v\n", err)
-			tcp.Close()
-			continue
-		}
-
-		w.Flush()
-		tcp.Write(byteBuff.Bytes())
-
-		logger.Printf("[ INFO ] response sent successfully: %v\n", resp.ContentLength)
-		tcp.Close()
+		handleRequest(tcp)
 	}
 }
