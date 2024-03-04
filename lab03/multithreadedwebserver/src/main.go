@@ -21,7 +21,7 @@ var (
 )
 
 const (
-	DEBUG      = false
+	DEBUG      = false // set true to enable logging
 	reqParam   = "file"
 	fileSystem = "filesystem"
 )

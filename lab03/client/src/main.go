@@ -16,7 +16,7 @@ import (
 var logger = log.Default()
 
 const (
-	LOG      = false
+	LOG      = false // set true to enable logging
 	reqParam = "file"
 	httpVer  = "HTTP/1.1"
 )
