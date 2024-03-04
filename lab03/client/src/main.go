@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -14,7 +15,10 @@ import (
 
 var logger = log.Default()
 
-const reqParam = "file"
+const (
+	reqParam = "file"
+	httpVer  = "HTTP/1.1"
+)
 
 func createURL(host, fileName string) *url.URL {
 	urlAddr := url.URL{}
@@ -23,6 +27,20 @@ func createURL(host, fileName string) *url.URL {
 	values.Add(reqParam, fileName)
 	urlAddr.RawQuery = values.Encode()
 	return &urlAddr
+}
+
+func createRequest(host, fileName string) *http.Request {
+	urlAddr := createURL(host, fileName)
+
+	return &http.Request{
+		Proto:      httpVer,
+		Host:       host,
+		Method:     http.MethodGet,
+		RequestURI: urlAddr.RequestURI(),
+		Header:     make(http.Header),
+		URL:        urlAddr,
+		Body:       nil,
+	}
 }
 
 func main() {
@@ -51,32 +69,36 @@ func main() {
 
 	logger.Println("[ INFO ] connection established")
 
-	urlAddr := createURL(conn.RemoteAddr().Network(), fileName)
-
-	resp := http.Request{
-		Proto:      "HTTP/1.1",
-		Host:       conn.RemoteAddr().Network(),
-		Method:     http.MethodGet,
-		RequestURI: urlAddr.RequestURI(),
-		Header:     make(http.Header),
-		URL:        urlAddr,
-		Body:       nil,
-	}
+	req := createRequest(conn.RemoteAddr().Network(), fileName)
 
 	var byteBuff bytes.Buffer
 	w := bufio.NewWriter(&byteBuff)
 
-	err = resp.Write(w)
+	err = req.Write(w)
 	w.Flush()
+	conn.Write(byteBuff.Bytes())
 
 	if err != nil {
 		logger.Printf("[ ERROR ] error writing HTTP response. %v\n", err)
 		conn.Close()
 		return
 	}
-	conn.Write(byteBuff.Bytes())
-
 	logger.Println("[ INFO ] request has been sent.")
 
+	resp, err := http.ReadResponse(bufio.NewReader(conn), req)
+	defer func() { resp.Body.Close() }()
+
+	if err != nil {
+		logger.Printf("[ ERROR ] error reading HTTP request: %v\n", err)
+		return
+	}
+	logger.Println("[ INFO ] response to request received.")
+
+	b, err := io.ReadAll(resp.Body)
+	if err != nil {
+		logger.Printf("[ ERROR ] body reading error: %v\n", err)
+	}
+
+	fmt.Println(string(b))
 	conn.Close()
 }
