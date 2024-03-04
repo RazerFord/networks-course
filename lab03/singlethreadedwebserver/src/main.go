@@ -2,7 +2,8 @@ package main
 
 import (
 	"bufio"
-	"fmt"
+	"bytes"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -50,6 +51,7 @@ func main() {
 
 	reader := bufio.NewReader(tcp)
 	req, err := http.ReadRequest(reader)
+	req.Body.Close()
 
 	if err != nil {
 		logger.Printf("[ ERROR ] %v\n", err)
@@ -73,13 +75,45 @@ func main() {
 		logger.Printf("[ INFO ] %v = %v\n", reqParam, file)
 	}
 
-	_, err = os.ReadFile(file)
+	fbytes, err := os.ReadFile(file)
 
-	if err  != nil {
-		logger.Printf("[ ERROR ] file opening error\n")
+	resp := http.Response{
+		Proto:      req.Proto,
+		Request:    req,
+		ProtoMajor: req.ProtoMajor,
+		ProtoMinor: req.ProtoMinor,
+		Header:     make(http.Header),
 	}
 
-	resp := http.Response{}
+	if os.IsNotExist(err) {
+		logger.Printf("[ ERROR ] file not found\n")
 
-	fmt.Printf("resp: %v\n", resp)
+		resp.Status = http.StatusText(http.StatusNotFound)
+		resp.StatusCode = http.StatusNotFound
+	} else if err != nil {
+		logger.Printf("[ ERROR ] file opening error\n")
+
+		resp.Status = http.StatusText(http.StatusNotFound)
+		resp.StatusCode = http.StatusNotFound
+	} else {
+		resp.Body = io.NopCloser(bytes.NewBuffer(fbytes))
+		resp.ContentLength = int64(len(fbytes))
+		resp.Status = http.StatusText(http.StatusAccepted)
+		resp.StatusCode = http.StatusAccepted
+	}
+
+	var byteBuff bytes.Buffer
+	w := bufio.NewWriter(&byteBuff)
+
+	err = resp.Write(w)
+
+	if err != nil {
+		logger.Printf("[ ERROR ] error writing HTTP response\n")
+		return
+	}
+
+	w.Flush()
+	tcp.Write(byteBuff.Bytes())
+
+	logger.Printf("[ INFO ] response sent successfully: %v\n", resp.ContentLength)
 }
