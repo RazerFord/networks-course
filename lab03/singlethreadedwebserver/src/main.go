@@ -41,7 +41,6 @@ func main() {
 	logger.Printf("[ INFO ] server created: http://%v:%v \n", addr.IP, addr.Port)
 
 	for {
-
 		tcp, err := server.AcceptTCP()
 
 		if err != nil {
@@ -52,13 +51,15 @@ func main() {
 
 		reader := bufio.NewReader(tcp)
 		req, err := http.ReadRequest(reader)
-		req.Body.Close()
 
 		if err != nil {
 			logger.Printf("[ ERROR ] %v\n", err)
+			tcp.Close()
+			continue
 		} else {
 			logger.Printf("[ INFO ] message read\n")
 		}
+		req.Body.Close()
 
 		params, err := req.URL.Parse(req.RequestURI)
 
@@ -71,7 +72,8 @@ func main() {
 
 		if !values.Has(reqParam) {
 			logger.Printf("[ ERROR ] %v parameter not found\n", reqParam)
-			return
+			tcp.Close()
+			continue
 		} else {
 			logger.Printf("[ INFO ] %v = %v\n", reqParam, file)
 		}
@@ -110,13 +112,15 @@ func main() {
 		err = resp.Write(w)
 
 		if err != nil {
-			logger.Printf("[ ERROR ] error writing HTTP response\n")
-			return
+			logger.Printf("[ ERROR ] error writing HTTP response. %v\n", err)
+			tcp.Close()
+			continue
 		}
 
 		w.Flush()
 		tcp.Write(byteBuff.Bytes())
 
 		logger.Printf("[ INFO ] response sent successfully: %v\n", resp.ContentLength)
+		tcp.Close()
 	}
 }
