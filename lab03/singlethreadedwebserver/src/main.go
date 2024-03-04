@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"strconv"
 )
 
@@ -17,7 +18,14 @@ var (
 	errFileParam = errors.New("file parameter not passed")
 )
 
-const reqParam = "file"
+const (
+	reqParam   = "file"
+	fileSystem = "filesystem"
+)
+
+func getPath(p string) string {
+	return path.Join(".", fileSystem, p)
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -88,7 +96,7 @@ func main() {
 			err = errFileParam
 		} else {
 			logger.Printf("[ INFO ] %v = %v\n", reqParam, file)
-			fbytes, err = os.ReadFile(file)
+			fbytes, err = os.ReadFile(getPath(file))
 		}
 
 		if os.IsNotExist(err) {
