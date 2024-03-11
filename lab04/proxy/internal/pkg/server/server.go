@@ -79,7 +79,7 @@ func (p *ProxyServer) httpHandler(w http.ResponseWriter, req *http.Request) {
 	resp, err := client.Do(nreq)
 	if err != nil {
 		glLog.Printf("the request failed: %v", err)
-		w.WriteHeader(resp.StatusCode)
+		w.WriteHeader(http.StatusNotFound)
 		return
 	}
 	defer resp.Body.Close()
