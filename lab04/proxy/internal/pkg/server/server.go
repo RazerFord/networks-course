@@ -51,63 +51,62 @@ func (ps *ProxyServer) Run() error {
 
 func (p *ProxyServer) httpHandler(w http.ResponseWriter, req *http.Request) {
 	if req.Method != http.MethodGet {
-		w.WriteHeader(http.StatusBadRequest)
-	} else {
-		if req.Method != http.MethodGet {
-			glLog.Printf("was expected %v but was %v", http.MethodGet, req.Method)
-			return
-		}
-		// glLog.Println("start")
-		// glLog.Printf("scheme %v\n", req.URL.Scheme)
-		// glLog.Printf("port %v\n", req.URL.Port())
-		// glLog.Printf("uri: %v\n", req.RequestURI)
-		// glLog.Printf("addr: %v\n", req.RemoteAddr)
-		// glLog.Printf("header: %v\n", req.Header)
-		// glLog.Printf("host: %v\n", req.Host)
-		// glLog.Printf("url-host: %v\n", req.URL.Host)
-
-		client := http.Client{}
-		nreq, err := http.NewRequest(req.Method, req.RequestURI, req.Body)
-		req.Body.Close()
-
-		if err != nil {
-			glLog.Printf("error creating Request for proxy: %v", err)
-			return
-		}
-
-		nreq.RequestURI = nreq.RequestURI
-		nreq.Header = req.Header.Clone()
-
-		resp, err := client.Do(nreq)
-		if err != nil {
-			glLog.Printf("the request failed: %v", err)
-			return
-		}
-		defer resp.Body.Close()
-
-		// glLog.Println("start")
-		// glLog.Printf("scheme %v\n", nreq.URL.Scheme)
-		// glLog.Printf("port %v\n", nreq.URL.Port())
-		// glLog.Printf("uri: %v\n", nreq.RequestURI)
-		// glLog.Printf("addr: %v\n", nreq.RemoteAddr)
-		// glLog.Printf("header: %v\n", nreq.Header)
-		// glLog.Printf("host: %v\n", nreq.Host)
-		// glLog.Printf("url-host: %v\n", nreq.URL.Host)
-
-		body, err := io.ReadAll(resp.Body)
-
-		if err != nil {
-			glLog.Printf("body reading error: %v", err)
-			return
-		}
-
-		header := w.Header()
-		copyHeader(resp.Header, header)
-		w.WriteHeader(resp.StatusCode)
-		w.Write(body)
-
-		p.journal.Printf(strToGreen("{URL: %v; Status: %v}"), resp.Request.URL, resp.Status)
+		glLog.Printf("was expected %v but was %v", http.MethodGet, req.Method)
+		return
 	}
+	// glLog.Println("start")
+	// glLog.Printf("scheme %v\n", req.URL.Scheme)
+	// glLog.Printf("port %v\n", req.URL.Port())
+	// glLog.Printf("uri: %v\n", req.RequestURI)
+	// glLog.Printf("addr: %v\n", req.RemoteAddr)
+	// glLog.Printf("header: %v\n", req.Header)
+	// glLog.Printf("host: %v\n", req.Host)
+	// glLog.Printf("url-host: %v\n", req.URL.Host)
+
+	client := http.Client{}
+	nreq, err := http.NewRequest(req.Method, req.RequestURI, req.Body)
+	req.Body.Close()
+
+	if err != nil {
+		glLog.Printf("error creating Request for proxy: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	nreq.RequestURI = nreq.RequestURI
+	nreq.Header = req.Header.Clone()
+
+	resp, err := client.Do(nreq)
+	if err != nil {
+		glLog.Printf("the request failed: %v", err)
+		w.WriteHeader(resp.StatusCode)
+		return
+	}
+	defer resp.Body.Close()
+
+	// glLog.Println("start")
+	// glLog.Printf("scheme %v\n", nreq.URL.Scheme)
+	// glLog.Printf("port %v\n", nreq.URL.Port())
+	// glLog.Printf("uri: %v\n", nreq.RequestURI)
+	// glLog.Printf("addr: %v\n", nreq.RemoteAddr)
+	// glLog.Printf("header: %v\n", nreq.Header)
+	// glLog.Printf("host: %v\n", nreq.Host)
+	// glLog.Printf("url-host: %v\n", nreq.URL.Host)
+
+	body, err := io.ReadAll(resp.Body)
+
+	if err != nil {
+		glLog.Printf("body reading error: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	header := w.Header()
+	copyHeader(resp.Header, header)
+	w.WriteHeader(resp.StatusCode)
+	w.Write(body)
+
+	p.journal.Printf(strToGreen("{URL: %v; Status: %v}"), resp.Request.URL, resp.Status)
 }
 
 func faviconHandler(w http.ResponseWriter, req *http.Request) {
