@@ -1,21 +1,35 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"razer-ford/proxy-server/internal/pkg/cache"
 	"strconv"
+	"time"
 )
 
 var (
 	glLog = log.Default()
+
+	errEtagNotFound = errors.New("Etag not found")
 )
 
 const (
 	green = "\033[0;32m"
 	reset = "\033[0m"
+
+	Etag         = "Etag"
+	CacheControl = "Cache-Control"
+	LastModified = "Last-Modified"
+
+	IfModifiedSince = "If-Modified-Since"
+	IfNoneMatch     = "If-None-Match"
+
+	layout = "Mon, 1 Jan 2006 00:00:00 GMT"
 )
 
 func init() {
@@ -30,6 +44,7 @@ type ProxyServer struct {
 	port    int
 	address string
 	journal log.Logger
+	ch      *cache.Cache
 }
 
 func NewProxyServer(port int, address string) *ProxyServer {
@@ -37,6 +52,7 @@ func NewProxyServer(port int, address string) *ProxyServer {
 		port:    port,
 		address: address,
 		journal: *log.New(os.Stdout, "", log.Ldate|log.Ltime),
+		ch:      cache.NewCache(),
 	}
 }
 
@@ -100,13 +116,37 @@ func (p *ProxyServer) handle(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	if err = p.cached(resp, body[:]); err != nil {
+		glLog.Println(err)
+	}
 
-	header := w.Header()
-	copyHeader(resp.Header, header)
+	copyHeader(resp.Header, w.Header())
 	w.WriteHeader(resp.StatusCode)
 	w.Write(body)
 
 	p.journal.Printf(strToGreen("{URL: %v; Status: %v}"), resp.Request.URL, resp.Status)
+}
+
+func (p *ProxyServer) cached(resp *http.Response, body []byte) error {
+	h := &resp.Header
+
+	etag := h.Get(Etag)
+	if etag == "" {
+		return errEtagNotFound
+	}
+	t, err := time.Parse(layout, h.Get(LastModified))
+	glLog.Println(h.Get(LastModified))
+	if err != nil {
+		return err
+	}
+	data := cache.NewData(
+		etag[1:len(etag)-1],
+		&t,
+		h.Get(CacheControl),
+		body,
+	)
+	p.ch.Set(data.Key, data)
+	return nil
 }
 
 func faviconHandler(w http.ResponseWriter, req *http.Request) {
