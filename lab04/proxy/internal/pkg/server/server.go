@@ -43,29 +43,34 @@ func NewProxyServer(port int, address string) *ProxyServer {
 func (ps *ProxyServer) Run() error {
 	glLog.Printf("running on address http://%v:%v\n", ps.address, ps.port)
 
-	http.HandleFunc("/", NewProxyServer(ps.port, ps.address).httpHandler)
 	http.HandleFunc("/favicon.ico", faviconHandler)
 
-	return http.ListenAndServe(ps.address+":"+strconv.Itoa(ps.port), nil)
+	return http.ListenAndServe(ps.address+":"+strconv.Itoa(ps.port), NewProxyServer(ps.port, ps.address))
 }
 
-func (p *ProxyServer) httpHandler(w http.ResponseWriter, req *http.Request) {
-	if req.Method != http.MethodGet {
-		glLog.Printf("was expected %v but was %v", http.MethodGet, req.Method)
-		return
-	}
-	// glLog.Println("start")
-	// glLog.Printf("scheme %v\n", req.URL.Scheme)
-	// glLog.Printf("port %v\n", req.URL.Port())
-	// glLog.Printf("uri: %v\n", req.RequestURI)
-	// glLog.Printf("addr: %v\n", req.RemoteAddr)
-	// glLog.Printf("header: %v\n", req.Header)
-	// glLog.Printf("host: %v\n", req.Host)
-	// glLog.Printf("url-host: %v\n", req.URL.Host)
+func (p *ProxyServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	switch req.Method {
+	case http.MethodPost:
+		{
 
+		}
+	case http.MethodGet:
+		{
+			p.handleGet(w, req)
+		}
+	default:
+		{
+			glLog.Printf("was expected %v but was %v", http.MethodGet, req.Method)
+		}
+	}
+}
+
+func (p *ProxyServer) handleGet(w http.ResponseWriter, req *http.Request) {
 	client := http.Client{}
-	nreq, err := http.NewRequest(req.Method, req.RequestURI, req.Body)
+
+	newReq, err := http.NewRequest(req.Method, req.RequestURI, req.Body)
 	req.Body.Close()
+	newReq.Header = req.Header.Clone()
 
 	if err != nil {
 		glLog.Printf("error creating Request for proxy: %v", err)
@@ -73,10 +78,7 @@ func (p *ProxyServer) httpHandler(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	nreq.RequestURI = nreq.RequestURI
-	nreq.Header = req.Header.Clone()
-
-	resp, err := client.Do(nreq)
+	resp, err := client.Do(newReq)
 	if err != nil {
 		glLog.Printf("the request failed: %v", err)
 		w.WriteHeader(http.StatusNotFound)
@@ -84,17 +86,7 @@ func (p *ProxyServer) httpHandler(w http.ResponseWriter, req *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	// glLog.Println("start")
-	// glLog.Printf("scheme %v\n", nreq.URL.Scheme)
-	// glLog.Printf("port %v\n", nreq.URL.Port())
-	// glLog.Printf("uri: %v\n", nreq.RequestURI)
-	// glLog.Printf("addr: %v\n", nreq.RemoteAddr)
-	// glLog.Printf("header: %v\n", nreq.Header)
-	// glLog.Printf("host: %v\n", nreq.Host)
-	// glLog.Printf("url-host: %v\n", nreq.URL.Host)
-
 	body, err := io.ReadAll(resp.Body)
-
 	if err != nil {
 		glLog.Printf("body reading error: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
