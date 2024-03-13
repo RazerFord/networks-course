@@ -76,7 +76,7 @@ func (ps *ProxyServer) Run() error {
 
 func (p *ProxyServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if p.blackList.blocked(req.RequestURI) {
-		glLog.Println("blacklist page")
+		glLog.Printf("blacklist page: %v\n", req.RequestURI)
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}

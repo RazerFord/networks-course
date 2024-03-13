@@ -5,7 +5,7 @@
             "kind": "domain"
         },
         {
-            "address": "http://www.example-url.com/",
+            "address": "http://www.example-url.com/test",
             "kind": "url"
         }
     ]
