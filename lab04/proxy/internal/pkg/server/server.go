@@ -52,7 +52,7 @@ func (p *ProxyServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	switch req.Method {
 	case http.MethodPost:
 		{
-
+			p.handlePost(w, req)
 		}
 	case http.MethodGet:
 		{
@@ -60,16 +60,23 @@ func (p *ProxyServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 	default:
 		{
-			glLog.Printf("was expected %v but was %v", http.MethodGet, req.Method)
+			glLog.Printf("was expected %v or %v but was %v", http.MethodGet, http.MethodPost, req.Method)
 		}
 	}
 }
 
+func (p *ProxyServer) handlePost(w http.ResponseWriter, req *http.Request) {
+	p.handle(w, req)
+}
+
 func (p *ProxyServer) handleGet(w http.ResponseWriter, req *http.Request) {
+	p.handle(w, req)
+}
+
+func (p *ProxyServer) handle(w http.ResponseWriter, req *http.Request) {
 	client := http.Client{}
 
 	newReq, err := http.NewRequest(req.Method, req.RequestURI, req.Body)
-	req.Body.Close()
 	newReq.Header = req.Header.Clone()
 
 	if err != nil {
@@ -77,6 +84,7 @@ func (p *ProxyServer) handleGet(w http.ResponseWriter, req *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+	defer req.Body.Close()
 
 	resp, err := client.Do(newReq)
 	if err != nil {
