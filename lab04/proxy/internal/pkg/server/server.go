@@ -1,11 +1,13 @@
 package server
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"razer-ford/proxy-server/internal/pkg/cache"
 	"strconv"
@@ -31,6 +33,11 @@ const (
 	IfNoneMatch     = "If-None-Match"
 
 	layout = "Mon, 02 Jan 2006 15:04:05 GMT"
+
+	blackList = "./configs/black-list.json"
+
+	kindDomain = "domain"
+	kindUrl    = "url"
 )
 
 func init() {
@@ -42,18 +49,20 @@ func strToGreen(str string) string {
 }
 
 type ProxyServer struct {
-	port    int
-	address string
-	journal log.Logger
-	ch      *cache.Cache
+	port      int
+	address   string
+	journal   log.Logger
+	cache     *cache.Cache
+	blackList *blocker
 }
 
 func NewProxyServer(port int, address string) *ProxyServer {
 	return &ProxyServer{
-		port:    port,
-		address: address,
-		journal: *log.New(os.Stdout, "", log.Ldate|log.Ltime),
-		ch:      cache.NewCache(),
+		port:      port,
+		address:   address,
+		journal:   *log.New(os.Stdout, "", log.Ldate|log.Ltime),
+		cache:     cache.NewCache(),
+		blackList: readBlackList(),
 	}
 }
 
@@ -66,6 +75,12 @@ func (ps *ProxyServer) Run() error {
 }
 
 func (p *ProxyServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	if p.blackList.blocked(req.RequestURI) {
+		glLog.Println("blacklist page")
+		w.WriteHeader(http.StatusForbidden)
+		return
+	}
+
 	switch req.Method {
 	case http.MethodPost:
 		{
@@ -131,7 +146,7 @@ func (p *ProxyServer) handleGet(w http.ResponseWriter, req *http.Request) {
 	defer req.Body.Close()
 
 	etag := strings.Trim(req.Header.Get(IfNoneMatch), "\"")
-	data, err := p.ch.Get(etag)
+	data, err := p.cache.Get(etag)
 	if err == nil && data != nil {
 		p.writeCachedResult(etag, req.RequestURI, w)
 		return
@@ -184,7 +199,7 @@ func (p *ProxyServer) cached(resp *http.Response, body []byte) error {
 		sec,
 		body,
 	)
-	err = p.ch.Set(data.Key, data)
+	err = p.cache.Set(data.Key, data)
 	if err == nil {
 		glLog.Println("the result is cached")
 	} else {
@@ -194,7 +209,7 @@ func (p *ProxyServer) cached(resp *http.Response, body []byte) error {
 }
 
 func (p *ProxyServer) writeCachedResult(etag, url string, w http.ResponseWriter) {
-	data, err := p.ch.Get(etag)
+	data, err := p.cache.Get(etag)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		glLog.Println(err)
@@ -234,4 +249,57 @@ func copyHeader(src, dst http.Header) {
 			dst.Add(k, v)
 		}
 	}
+}
+
+type blocker struct {
+	domains map[string]struct{}
+	urls    map[string]struct{}
+}
+
+func (b *blocker) blocked(fullUrl string) bool {
+	parsed, err := url.Parse(fullUrl)
+	if err == nil {
+		_, ok := b.domains[parsed.Host]
+		if ok {
+			return true
+		}
+	}
+	_, ok := b.urls[fullUrl]
+	return ok
+}
+
+type BlockedResources struct {
+	Data []BlockedResource `json:"data"`
+}
+
+type BlockedResource struct {
+	Address string `json:"address"`
+	Kind    string `json:"kind"`
+}
+
+func readBlackList() *blocker {
+	bs, err := os.ReadFile(blackList)
+	set := map[string]struct{}{}
+	if err != nil || len(bs) == 0 {
+		return &blocker{domains: set, urls: set}
+	}
+	var blockedResources BlockedResources
+	json.Unmarshal(bs, &blockedResources)
+
+	b := blocker{
+		domains: map[string]struct{}{},
+		urls:    map[string]struct{}{},
+	}
+	for _, v := range blockedResources.Data {
+		switch v.Kind {
+		case kindDomain:
+			b.domains[v.Address] = struct{}{}
+		case kindUrl:
+			b.urls[v.Address] = struct{}{}
+		default:
+			glLog.Println("blacklist parsing error")
+		}
+	}
+
+	return &b
 }

@@ -1,0 +1,12 @@
+{
+    "data": [
+        {
+            "address": "www.example.com",
+            "kind": "domain"
+        },
+        {
+            "address": "http://www.example-url.com/",
+            "kind": "url"
+        }
+    ]
+}
