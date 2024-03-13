@@ -9,13 +9,14 @@ import (
 	"os"
 	"razer-ford/proxy-server/internal/pkg/cache"
 	"strconv"
+	"strings"
 	"time"
 )
 
 var (
 	glLog = log.Default()
 
-	errEtagNotFound = errors.New("Etag not found")
+	errEtagNotFound = errors.New("etag not found")
 )
 
 const (
@@ -29,7 +30,7 @@ const (
 	IfModifiedSince = "If-Modified-Since"
 	IfNoneMatch     = "If-None-Match"
 
-	layout = "Mon, 1 Jan 2006 00:00:00 GMT"
+	layout = "Mon, 02 Jan 2006 15:04:05 GMT"
 )
 
 func init() {
@@ -82,14 +83,6 @@ func (p *ProxyServer) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 }
 
 func (p *ProxyServer) handlePost(w http.ResponseWriter, req *http.Request) {
-	p.handle(w, req)
-}
-
-func (p *ProxyServer) handleGet(w http.ResponseWriter, req *http.Request) {
-	p.handle(w, req)
-}
-
-func (p *ProxyServer) handle(w http.ResponseWriter, req *http.Request) {
 	client := http.Client{}
 
 	newReq, err := http.NewRequest(req.Method, req.RequestURI, req.Body)
@@ -101,6 +94,48 @@ func (p *ProxyServer) handle(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	defer req.Body.Close()
+
+	resp, err := client.Do(newReq)
+	if err != nil {
+		glLog.Printf("the request failed: %v", err)
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		glLog.Printf("body reading error: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	copyHeader(resp.Header, w.Header())
+	w.WriteHeader(resp.StatusCode)
+	w.Write(body)
+
+	p.journal.Printf(strToGreen("{URL: %v; Status: %v}"), resp.Request.URL, resp.Status)
+}
+
+func (p *ProxyServer) handleGet(w http.ResponseWriter, req *http.Request) {
+	client := http.Client{}
+
+	newReq, err := http.NewRequest(req.Method, req.RequestURI, req.Body)
+	newReq.Header = req.Header.Clone()
+
+	if err != nil {
+		glLog.Printf("error creating Request for proxy: %v", err)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	defer req.Body.Close()
+
+	etag := strings.Trim(req.Header.Get(IfNoneMatch), "\"")
+	data, err := p.ch.Get(etag)
+	if err == nil && data != nil {
+		p.writeCachedResult(etag, req.RequestURI, w)
+		return
+	}
 
 	resp, err := client.Do(newReq)
 	if err != nil {
@@ -134,19 +169,59 @@ func (p *ProxyServer) cached(resp *http.Response, body []byte) error {
 	if etag == "" {
 		return errEtagNotFound
 	}
-	t, err := time.Parse(layout, h.Get(LastModified))
-	glLog.Println(h.Get(LastModified))
+	t, err := parseTime(h.Get(LastModified))
 	if err != nil {
 		return err
 	}
+	sec, err := parseCacheControl(h.Get(CacheControl))
+	if err != nil {
+		sec = 10
+	}
+
 	data := cache.NewData(
-		etag[1:len(etag)-1],
-		&t,
-		h.Get(CacheControl),
+		strings.Trim(etag, "\""),
+		t,
+		sec,
 		body,
 	)
-	p.ch.Set(data.Key, data)
-	return nil
+	err = p.ch.Set(data.Key, data)
+	if err == nil {
+		glLog.Println("the result is cached")
+	} else {
+		glLog.Println("the result is not cached")
+	}
+	return err
+}
+
+func (p *ProxyServer) writeCachedResult(etag, url string, w http.ResponseWriter) {
+	data, err := p.ch.Get(etag)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		glLog.Println(err)
+		return
+	}
+	w.Header().Add(Etag, etag)
+	w.WriteHeader(http.StatusNotModified)
+	w.Write(data.Value)
+	glLog.Println(strToGreen("returned the cached result: " + url))
+}
+
+func parseTime(t string) (*time.Time, error) {
+	v, err := time.Parse(layout, t)
+	if err != nil {
+		return nil, err
+	}
+	return &v, nil
+}
+
+func parseCacheControl(cc string) (sec int, err error) {
+	if cc != "" {
+		num := strings.Trim(cc, "mx-age=")
+		if sec, err = strconv.Atoi(num); err != nil {
+			return 0, err
+		}
+	}
+	return
 }
 
 func faviconHandler(w http.ResponseWriter, req *http.Request) {

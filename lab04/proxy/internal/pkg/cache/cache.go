@@ -14,17 +14,22 @@ const (
 type Data struct {
 	Key          string     `json:"key"`
 	LastModified *time.Time `json:"last-modified"`
-	CacheControl string     `json:"cache-control"`
+	CacheControl int        `json:"cache-control"` // second
 	Value        []byte     `json:"value"`
 }
 
-func NewData(key string, lastModified *time.Time, cacheControl string, value []byte) *Data {
+func NewData(key string, lastModified *time.Time, cacheControl int, value []byte) *Data {
+	local := lastModified.Local()
 	return &Data{
 		Key:          key,
-		LastModified: lastModified,
+		LastModified: &local,
 		CacheControl: cacheControl,
 		Value:        value,
 	}
+}
+
+func intToSeconds(i int) time.Duration {
+	return time.Duration(i) * time.Second
 }
 
 type Cache struct {
@@ -64,6 +69,10 @@ func (c *Cache) Set(key string, data *Data) error {
 	}
 
 	return c.d.Write(key, bs)
+}
+
+func (c *Cache) Has(key string) bool {
+	return c.d.Has(key)
 }
 
 func (c *Cache) Erase(key string) error {
