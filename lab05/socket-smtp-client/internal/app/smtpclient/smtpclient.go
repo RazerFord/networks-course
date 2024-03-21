@@ -80,8 +80,8 @@ func (c *Client) SendMail(msg Message) error {
 	}
 
 	buff := bytes.Buffer{}
-	setHeader(&buff, "From", "c.From")
-	setHeader(&buff, "To", "c.To")
+	setHeader(&buff, "From", c.From)
+	setHeader(&buff, "To", c.To)
 	setHeader(&buff, "Content-Type", msg.Mime)
 	buff.WriteString(fmt.Sprintf("%s\r\n", msg.Body))
 	buff.WriteString(".\r\n")
