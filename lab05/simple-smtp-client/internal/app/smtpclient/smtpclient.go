@@ -35,7 +35,7 @@ func (c *Client) SendMail(mesg Message) {
 	msg.SetHeader("Subject", "")
 	msg.SetBody(mesg.Mime, mesg.Body)
 
-	d := gomail.NewDialer(c.Smtpaddress, 587, c.From, c.Pass)
+	d := gomail.NewDialer(c.Smtpaddress, c.Smtpport, c.From, c.Pass)
 
 	if err := d.DialAndSend(msg); err != nil {
 		fmt.Println(err)
