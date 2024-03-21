@@ -5,12 +5,17 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 )
 
 const (
 	local = "127.0.0.1"
+)
+
+var (
+	errCode = errors.New("wrong code")
 )
 
 ////////////////////////////// Client //////////////////////////////
@@ -114,9 +119,13 @@ func (c *Connect) send(msg, code string) error {
 	c.w.Flush()
 	s, err := c.r.ReadString('\n')
 
-	if err != nil || !strings.HasPrefix(s, "250") {
+	if err != nil {
 		return err
 	}
+	if !strings.HasPrefix(s, code) {
+		return errCode
+	}
+
 	return nil
 }
 

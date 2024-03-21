@@ -13,7 +13,10 @@ var required = []string{"to", "from", "password", "smtp", "port", "message"}
 func main() {
 	client, message := create()
 
-	client.SendMail(*message)
+	if err := client.SendMail(*message); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
 
 func create() (*smtpclient.Client, *smtpclient.Message) {
