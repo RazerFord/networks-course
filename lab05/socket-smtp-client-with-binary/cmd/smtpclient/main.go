@@ -60,7 +60,7 @@ func create() (*smtpclient.Client, *smtpclient.Message) {
 			}
 		case ".png":
 			{
-				mime = "text/" + ext[1:]
+				mime = "image/" + ext[1:]
 				t = smtpclient.IMAGE
 			}
 		case ".jpeg", ".jpg":

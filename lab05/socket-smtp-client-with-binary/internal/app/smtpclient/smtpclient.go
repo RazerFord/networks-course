@@ -11,7 +11,8 @@ import (
 )
 
 const (
-	local = "127.0.0.1"
+	local    = "127.0.0.1"
+	boundary = "sha-boundary"
 
 	IMAGE = 1
 	TEXT  = 2
@@ -90,14 +91,21 @@ func (c *Client) SendMail(msg Message) error {
 	buff := bytes.Buffer{}
 	setHeader(&buff, "From", c.From)
 	setHeader(&buff, "To", c.To)
-	setHeader(&buff, "Content-Type", msg.Mime)
+	setHeader(&buff, "Mime-Version", "1.0")
+	setHeader(&buff, "Content-Type", "multipart/mixed; boundary="+boundary+"\r\n")
 	if msg.Type == IMAGE {
-		setHeader(&buff, "Content-Transfer-Encoding", "base64;")
+		buff.WriteString(fmt.Sprintf("\r\n--%s\r\n", boundary))
 		slice := strings.Split(msg.Filename, "/")
 		setHeader(&buff, "Content-Disposition", "attachment; filename="+slice[len(slice)-1])
+		setHeader(&buff, "Content-Transfer-Encoding", "base64")
+		setHeader(&buff, "Content-Type", msg.Mime+"; name="+slice[len(slice)-1]+"\r\n")
 		buff.WriteString(base64.StdEncoding.EncodeToString([]byte(msg.Body)))
+		buff.WriteString(fmt.Sprintf("\r\n\r\n--%s--\r\n", boundary))
 	} else {
+		buff.WriteString(fmt.Sprintf("\r\n--%s\r\n", boundary))
+		setHeader(&buff, "Content-Type", msg.Mime+"\r\n")
 		buff.WriteString(msg.Body)
+		buff.WriteString(fmt.Sprintf("\r\n\r\n--%s--\r\n", boundary))
 	}
 	buff.WriteString("\r\n.\r\n")
 
@@ -135,6 +143,7 @@ func (c *Connect) send(msg, code string) error {
 		return err
 	}
 	if !strings.HasPrefix(s, code) {
+		fmt.Println(s)
 		return errCode
 	}
 
