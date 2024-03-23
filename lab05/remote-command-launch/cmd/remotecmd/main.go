@@ -62,6 +62,7 @@ func main() {
 
 			w.Write(out)
 			w.Flush()
+			fmt.Printf("[ INFO ] %s\n", name)
 		}()
 	}
 }
