@@ -79,16 +79,18 @@ func main() {
 				break
 			}
 		}
-		printed <- struct{}{}
+		printed <- struct{}{} // double kik
 	}()
 
-	w.WriteString("LIST\r\n")
+	w.WriteString("LIST Vorne\r\n")
 	w.Flush()
 
 	<-printed
 	s, e := r.ReadString('\n')
 	check(e)
 	fmt.Println(s)
+
+
 }
 
 func require(b bool, err error) {
@@ -103,4 +105,12 @@ func check(err error) {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+}
+
+func Transform[T any, R any](slice []T, f func(t T) R) []R {
+	r := make([]R, len(slice))
+	for i, v := range slice {
+		r[i] = f(v)
+	}
+	return r
 }
