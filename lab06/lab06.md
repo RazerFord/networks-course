@@ -44,7 +44,21 @@
 Приложите скриншоты.
 
 #### Скрины
-todo
+Слева находится `GUI` клиента `FileZilla`, справа сверху - `GUI` администратора сервера `FileZilla`, справа снизу статус сервера
+
+![filezilla](./images/filezilla-server-client-status-2.png)
+
+Статус созданного `FTP` сервера
+
+![ftp-server](./images/filezilla-server-2.png)
+
+Создан тестовый пользователь `testftp`
+
+![filezilla-client](./images/test-user-2.png)
+
+Демонстрация работы `filezilla` в `GUI` клиента
+
+![gui-client-filezilla](./images/gui-client-2.png)
 
 ### FTP клиент (3 балла)
 Создайте консольное приложение FTP клиента для работы с файлами по FTP. Приложение может
