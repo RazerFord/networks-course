@@ -2,9 +2,12 @@ package command
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -17,6 +20,8 @@ type Query interface {
 	Do(*bufio.Writer, *bufio.Reader) error
 }
 
+////////////////////////////// User //////////////////////////////
+
 type User struct {
 	Name string
 }
@@ -27,16 +32,14 @@ func (u *User) Do(w *bufio.Writer, r *bufio.Reader) error {
 
 	s, err := r.ReadString('\n')
 
-	if err != nil {
+	if err = checkResponse(s, err, "331"); err != nil {
 		return err
-	}
-
-	if !strings.HasPrefix(s, "331") {
-		return fmt.Errorf("%s: %w", s[:len(s)-2], errAuth)
 	}
 
 	return nil
 }
+
+////////////////////////////// Pass //////////////////////////////
 
 type Pass struct {
 	Pass string
@@ -48,16 +51,14 @@ func (p *Pass) Do(w *bufio.Writer, r *bufio.Reader) error {
 
 	s, err := r.ReadString('\n')
 
-	if err != nil {
+	if err = checkResponse(s, err, "230"); err != nil {
 		return err
-	}
-
-	if !strings.HasPrefix(s, "230") {
-		return fmt.Errorf("%s: %w", s[:len(s)-2], errAuth)
 	}
 
 	return nil
 }
+
+////////////////////////////// Pasv //////////////////////////////
 
 type Pasv struct{}
 
@@ -66,52 +67,80 @@ func (p *Pasv) Do(w *bufio.Writer, _ *bufio.Reader) {
 	w.Flush()
 }
 
-type List struct{}
+////////////////////////////// LIST //////////////////////////////
+
+type List struct {
+	Path string
+}
 
 func (l *List) Do(w *bufio.Writer, r *bufio.Reader) error {
 	pasv := Pasv{}
 	pasv.Do(w, r)
 	s, err := r.ReadString('\n')
 
-	if err != nil {
+	if err = checkResponse(s, err, "227"); err != nil {
 		return err
 	}
 
-	if !strings.HasPrefix(s, "227") {
-		return fmt.Errorf("%s", s[:len(s)-2])
-	}
+	printer := Printer{make(chan struct{}, 1)}
+	go printer.do(parseAddress(s))
 
-	addr := parseAddress(s)
-
-	printed := make(chan struct{})
-	go func() {
-		conn, err := net.Dial("tcp", addr)
-
-		if err != nil {
-			return
-		}
-
-		r := bufio.NewReader(conn)
-
-		for {
-			s, e := r.ReadString('\n')
-			if e != nil {
-				fmt.Println(s)
-				break
-			}
-			fmt.Print(s)
-		}
-		printed <- struct{}{} // double kik
-	}()
-
-	w.WriteString("LIST\r\n")
+	w.WriteString(fmt.Sprintf("LIST %s\r\n", l.Path))
 	w.Flush()
 
-	<-printed
-	s, e := r.ReadString('\n')
-	fmt.Println(s)
+	s, err = r.ReadString('\n')
 
-	return e
+	if err = checkResponse(s, err, "150"); err != nil {
+		return err
+	}
+
+	<-printer.printed
+
+	s, err = r.ReadString('\n')
+	if err = checkResponse(s, err, "226"); err != nil {
+		return err
+	}
+
+	return err
+}
+
+////////////////////////////// Retr //////////////////////////////
+
+type Retr struct {
+	Source string
+	Target string
+}
+
+func (rtr *Retr) Do(w *bufio.Writer, r *bufio.Reader) error {
+	pasv := Pasv{}
+	pasv.Do(w, r)
+	s, err := r.ReadString('\n')
+
+	if err = checkResponse(s, err, "227"); err != nil {
+		return err
+	}
+
+	d := Downloader{rtr.Target, make(chan struct{}, 1)}
+	go d.do(parseAddress(s))
+
+	w.WriteString(fmt.Sprintf("RETR %s\r\n", rtr.Source))
+	w.Flush()
+
+	s, err = r.ReadString('\n')
+
+	if err = checkResponse(s, err, "150"); err != nil {
+		return err
+	}
+
+	<-d.downloaded
+
+	s, err = r.ReadString('\n')
+
+	if err = checkResponse(s, err, "226"); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func parseAddress(s string) string {
@@ -130,4 +159,73 @@ func parseAddress(s string) string {
 	}
 
 	return fmt.Sprintf("%s:%d", ip, port)
+}
+
+func checkResponse(s string, e error, code string) error {
+	if e != nil {
+		return e
+	}
+
+	if !strings.HasPrefix(s, code) {
+		return fmt.Errorf("%s", s[:len(s)-2])
+	}
+
+	return nil
+}
+
+////////////////////////////// Printer //////////////////////////////
+
+type Printer struct {
+	printed chan struct{}
+}
+
+func (p *Printer) do(addr string) {
+	conn, err := net.Dial("tcp", addr)
+
+	if err != nil {
+		return
+	}
+
+	r := bufio.NewReader(conn)
+	printResult(r)
+
+	p.printed <- struct{}{}
+}
+
+func printResult(r *bufio.Reader) {
+	for {
+		s, e := r.ReadString('\n')
+		if e != nil {
+			break
+		}
+		fmt.Print(s)
+	}
+}
+
+////////////////////////////// Downloader //////////////////////////////
+
+type Downloader struct {
+	dir        string
+	downloaded chan struct{}
+}
+
+func (d *Downloader) do(addr string) {
+	conn, err := net.Dial("tcp", addr)
+
+	if err != nil {
+		return
+	}
+
+	r := bufio.NewReader(conn)
+	buff := bytes.Buffer{}
+	for {
+		b, err := r.ReadByte()
+		if err != nil {
+			break
+		}
+		buff.WriteByte(b)
+	}
+	os.WriteFile(d.dir, buff.Bytes(), fs.ModePerm)
+
+	d.downloaded <- struct{}{}
 }

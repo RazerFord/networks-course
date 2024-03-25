@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"ftpclient/internal/app/command"
-	"ftpclient/internal/app/common"
 	"net"
-	"strconv"
 	"strings"
 )
 
@@ -70,53 +68,12 @@ func (ser *Server) Auth(name, pass string) error {
 }
 
 func (ser *Server) Run() error {
-	pasv := command.Pasv{}
-	pasv.Do(ser.w, ser.r)
-	s, err := ser.r.ReadString('\n')
-	common.Check(err)
-	common.Require(!strings.HasPrefix(s, "227"), fmt.Errorf("%s", s[:len(s)-2]))
+	list := command.List{}
+	list.Do(ser.w, ser.r)
 
-	fmt.Println(s)
-	lb := strings.Index(s, "(") + 1
-	rb := strings.Index(s, ")")
-	ipslice := strings.Split(s[lb:rb], ",")
-	ipstr := strings.Join(ipslice[0:4], ".")
-	ip := net.ParseIP(ipstr)
-
-	port := 0
-	step := 256
-	for _, v := range ipslice[4:] {
-		n, _ := strconv.Atoi(v)
-		port += n * step
-		step /= 256
-	}
-
-	printed := make(chan struct{})
-	go func() {
-		conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", ip, port))
-		common.Check(err)
-
-		r := bufio.NewReader(conn)
-
-		for {
-			s, e := r.ReadString('\n')
-			fmt.Print(s)
-			if e != nil {
-				fmt.Println(e)
-				fmt.Println(s)
-				break
-			}
-		}
-		printed <- struct{}{} // double kik
-	}()
-
-	ser.w.WriteString("LIST\r\n")
-	ser.w.Flush()
-
-	<-printed
-	s, e := ser.r.ReadString('\n')
-	common.Check(e)
-	fmt.Println(s)
+	retr := command.Retr{Source: "actorstoday.txt", Target: "./" + "actorstoday.txt"}
+	err := retr.Do(ser.w, ser.r)
+	fmt.Println(err)
 	return nil
 }
 
