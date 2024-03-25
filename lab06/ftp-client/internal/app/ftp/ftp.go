@@ -90,9 +90,11 @@ func (ser *Server) Run() error {
 			{
 				fmt.Println("Select source:")
 				source, _ := r.ReadString('\n')
+				source = source[:len(source)-1]
 
 				fmt.Println("Select target:")
 				target, _ := r.ReadString('\n')
+				target = target[:len(target)-1]
 
 				retr := command.Retr{Source: source, Target: target}
 				err := retr.Do(ser.w, ser.r)
@@ -106,9 +108,16 @@ func (ser *Server) Run() error {
 			{
 				fmt.Println("Select source:")
 				source, _ := r.ReadString('\n')
+				source = source[:len(source)-1]
+
+				if _, err := os.Stat(source); errors.Is(err, os.ErrNotExist) {
+					fmt.Println("The file does not exist")
+					continue
+				}
 
 				fmt.Println("Select target:")
 				target, _ := r.ReadString('\n')
+				target = target[:len(target)-1]
 
 				stor := command.Stor{Source: source, Target: target}
 				err := stor.Do(ser.w, ser.r)
