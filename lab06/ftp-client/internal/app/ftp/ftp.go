@@ -14,6 +14,16 @@ var (
 	errConnServer = errors.New("server connection error")
 )
 
+const (
+	help = `
+list - list of files and directories
+retr - download file from source to target
+stor - load file from source to target
+help - withdraw help
+quit - go out
+`
+)
+
 type Server struct {
 	Address string
 	Port    int
@@ -70,6 +80,7 @@ func (ser *Server) Auth(name, pass string) error {
 }
 
 func (ser *Server) Run() error {
+	fmt.Println(help)
 	r := bufio.NewReader(os.Stdin)
 	for {
 		cmd, err := r.ReadString('\n')
@@ -140,6 +151,10 @@ func (ser *Server) Run() error {
 				}
 				fmt.Println("Goodbye")
 				return nil
+			}
+		case "help":
+			{
+				fmt.Println(help)
 			}
 		default:
 			{
