@@ -143,6 +143,43 @@ func (rtr *Retr) Do(w *bufio.Writer, r *bufio.Reader) error {
 	return nil
 }
 
+////////////////////////////// Stor //////////////////////////////
+
+type Stor struct {
+	Source string
+	Target string
+}
+
+func (str *Stor) Do(w *bufio.Writer, r *bufio.Reader) error {
+	pasv := Pasv{}
+	pasv.Do(w, r)
+	s, err := r.ReadString('\n')
+
+	if err = checkResponse(s, err, "227"); err != nil {
+		return err
+	}
+
+	u := Uploader{filename: str.Source}
+	go u.do(parseAddress(s))
+
+	w.WriteString(fmt.Sprintf("STOR %s\r\n", str.Target))
+	s, err = r.ReadString('\n')
+	fmt.Println(fmt.Sprintf("STOR %s\r\n", str.Target))
+
+	if err = checkResponse(s, err, "150"); err != nil {
+		return err
+	}
+
+	<-u.uploaded
+
+	s, err = r.ReadString('\n')
+	if err = checkResponse(s, err, "226"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func parseAddress(s string) string {
 	lb := strings.Index(s, "(") + 1
 	rb := strings.Index(s, ")")
@@ -183,6 +220,7 @@ func (p *Printer) do(addr string) {
 	conn, err := net.Dial("tcp", addr)
 
 	if err != nil {
+		fmt.Println(err)
 		return
 	}
 
@@ -211,10 +249,11 @@ type Downloader struct {
 
 func (d *Downloader) do(addr string) {
 	conn, err := net.Dial("tcp", addr)
-
 	if err != nil {
+		fmt.Println(err)
 		return
 	}
+	defer conn.Close()
 
 	r := bufio.NewReader(conn)
 	buff := bytes.Buffer{}
@@ -228,4 +267,40 @@ func (d *Downloader) do(addr string) {
 	os.WriteFile(d.dir, buff.Bytes(), fs.ModePerm)
 
 	d.downloaded <- struct{}{}
+}
+
+////////////////////////////// Uploader //////////////////////////////
+
+type Uploader struct {
+	filename string
+	uploaded chan struct{}
+}
+
+func (u *Uploader) do(addr string) {
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer conn.Close()
+
+	w := bufio.NewWriter(conn)
+	bs, err := os.ReadFile(u.filename)
+
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	for len(bs) != 0 {
+		n, err := w.Write(bs)
+
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		bs = bs[:len(bs)-n]
+	}
+
+	u.uploaded <- struct{}{}
 }
