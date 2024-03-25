@@ -62,6 +62,25 @@ func (p *Pass) Do(w *bufio.Writer, r *bufio.Reader) error {
 	return nil
 }
 
+////////////////////////////// Quit //////////////////////////////
+
+type Quit struct {
+	Pass string
+}
+
+func (q *Quit) Do(w *bufio.Writer, r *bufio.Reader) error {
+	w.WriteString("Quit\r\n")
+	w.Flush()
+
+	s, err := r.ReadString('\n')
+
+	if err = checkResponse(s, err, "221"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 ////////////////////////////// Pasv //////////////////////////////
 
 type Pasv struct{}
@@ -174,9 +193,7 @@ func (str *Stor) Do(w *bufio.Writer, r *bufio.Reader) error {
 		return err
 	}
 
-	fmt.Println("asdasd")
 	<-u.uploaded
-	fmt.Println("asdasd12")
 
 	s, err = r.ReadString('\n')
 	if err = checkResponse(s, err, "226"); err != nil {

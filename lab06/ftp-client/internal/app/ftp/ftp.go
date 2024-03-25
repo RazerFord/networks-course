@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"ftpclient/internal/app/command"
 	"net"
+	"os"
 	"strings"
 )
 
@@ -64,23 +65,75 @@ func (ser *Server) Auth(name, pass string) error {
 		}
 	}
 
+	fmt.Println("Authorized")
 	return nil
 }
 
 func (ser *Server) Run() error {
+	r := bufio.NewReader(os.Stdin)
+	for {
+		cmd, err := r.ReadString('\n')
+		if err != nil {
+			return err
+		}
+		cmd = strings.Trim(cmd, " \n\r")
+		switch strings.ToLower(cmd) {
+		case "list":
+			{
+				list := command.List{}
+				err := list.Do(ser.w, ser.r)
+				if err != nil {
+					fmt.Println(err.Error())
+				}
+			}
+		case "retr":
+			{
+				fmt.Println("Select source:")
+				source, _ := r.ReadString('\n')
 
-	// retr := command.Retr{Source: "text.txt", Target: "./" + "text.txt"}
-	// err := retr.Do(ser.w, ser.r)
-	// fmt.Println(err)
+				fmt.Println("Select target:")
+				target, _ := r.ReadString('\n')
 
-	stor := command.Stor{Source: "./hello.txt", Target: "hello.txt"}
-	err := stor.Do(ser.w, ser.r)
-	fmt.Println(err)
+				retr := command.Retr{Source: source, Target: target}
+				err := retr.Do(ser.w, ser.r)
+				if err != nil {
+					fmt.Println(err.Error())
+				} else {
+					fmt.Println("File downloaded")
+				}
+			}
+		case "stor":
+			{
+				fmt.Println("Select source:")
+				source, _ := r.ReadString('\n')
 
-	list := command.List{}
-	list.Do(ser.w, ser.r)
+				fmt.Println("Select target:")
+				target, _ := r.ReadString('\n')
 
-	return nil
+				stor := command.Stor{Source: source, Target: target}
+				err := stor.Do(ser.w, ser.r)
+				if err != nil {
+					fmt.Println(err)
+				} else {
+					fmt.Println("File uploaded")
+				}
+			}
+		case "quit":
+			{
+				quit := command.Quit{}
+				err := quit.Do(ser.w, ser.r)
+				if err != nil {
+					fmt.Println(err)
+				}
+				fmt.Println("Goodbye")
+				return nil
+			}
+		default:
+			{
+				fmt.Println("Unknown command")
+			}
+		}
+	}
 }
 
 func (ser *Server) Close() {
