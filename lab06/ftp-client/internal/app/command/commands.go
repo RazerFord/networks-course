@@ -97,34 +97,8 @@ type List struct {
 }
 
 func (l *List) Do(w *bufio.Writer, r *bufio.Reader) error {
-	pasv := Pasv{}
-	pasv.Do(w, r)
-	s, err := r.ReadString('\n')
-
-	if err = checkResponse(s, err, "227"); err != nil {
-		return err
-	}
-
-	printer := Printer{make(chan struct{}, 1)}
-	go printer.do(parseAddress(s))
-
-	w.WriteString(fmt.Sprintf("LIST %s\r\n", l.Path))
-	w.Flush()
-
-	s, err = r.ReadString('\n')
-
-	if err = checkResponse(s, err, "150"); err != nil {
-		return err
-	}
-
-	<-printer.printed
-
-	s, err = r.ReadString('\n')
-	if err = checkResponse(s, err, "226"); err != nil {
-		return err
-	}
-
-	return err
+	var le Executor = &Printer{make(chan struct{}, 1)}
+	return do(w, r, &le, fmt.Sprintf("LIST %s\r\n", l.Path))
 }
 
 ////////////////////////////// Retr //////////////////////////////
@@ -135,35 +109,8 @@ type Retr struct {
 }
 
 func (rtr *Retr) Do(w *bufio.Writer, r *bufio.Reader) error {
-	pasv := Pasv{}
-	pasv.Do(w, r)
-	s, err := r.ReadString('\n')
-
-	if err = checkResponse(s, err, "227"); err != nil {
-		return err
-	}
-
-	d := Downloader{rtr.Target, make(chan struct{}, 1)}
-	go d.do(parseAddress(s))
-
-	w.WriteString(fmt.Sprintf("RETR %s\r\n", rtr.Source))
-	w.Flush()
-
-	s, err = r.ReadString('\n')
-
-	if err = checkResponse(s, err, "150"); err != nil {
-		return err
-	}
-
-	<-d.downloaded
-
-	s, err = r.ReadString('\n')
-
-	if err = checkResponse(s, err, "226"); err != nil {
-		return err
-	}
-
-	return nil
+	var de Executor = &Downloader{rtr.Target, make(chan struct{}, 1)}
+	return do(w, r, &de, fmt.Sprintf("RETR %s\r\n", rtr.Source))
 }
 
 ////////////////////////////// Stor //////////////////////////////
@@ -174,33 +121,8 @@ type Stor struct {
 }
 
 func (str *Stor) Do(w *bufio.Writer, r *bufio.Reader) error {
-	pasv := Pasv{}
-	pasv.Do(w, r)
-	s, err := r.ReadString('\n')
-
-	if err = checkResponse(s, err, "227"); err != nil {
-		return err
-	}
-
-	u := Uploader{filename: str.Source, uploaded: make(chan struct{}, 1)}
-	go u.do(parseAddress(s))
-
-	w.WriteString(fmt.Sprintf("STOR %s\r\n", str.Target))
-	w.Flush()
-	s, err = r.ReadString('\n')
-
-	if err = checkResponse(s, err, "150"); err != nil {
-		return err
-	}
-
-	<-u.uploaded
-
-	s, err = r.ReadString('\n')
-	if err = checkResponse(s, err, "226"); err != nil {
-		return err
-	}
-
-	return nil
+	var ue Executor = &Uploader{filename: str.Source, uploaded: make(chan struct{}, 1)}
+	return do(w, r, &ue, fmt.Sprintf("STOR %s\r\n", str.Target))
 }
 
 func parseAddress(s string) string {
@@ -233,6 +155,13 @@ func checkResponse(s string, e error, code string) error {
 	return nil
 }
 
+////////////////////////////// Executor //////////////////////////////
+
+type Executor interface {
+	do(string)
+	wait()
+}
+
 ////////////////////////////// Printer //////////////////////////////
 
 type Printer struct {
@@ -250,6 +179,10 @@ func (p *Printer) do(addr string) {
 
 	r := bufio.NewReader(conn)
 	printResult(r)
+}
+
+func (p *Printer) wait() {
+	<-p.printed
 }
 
 func printResult(r *bufio.Reader) {
@@ -290,6 +223,10 @@ func (d *Downloader) do(addr string) {
 	os.WriteFile(d.dir, buff.Bytes(), fs.ModePerm)
 }
 
+func (d *Downloader) wait() {
+	<-d.downloaded
+}
+
 ////////////////////////////// Uploader //////////////////////////////
 
 type Uploader struct {
@@ -325,4 +262,39 @@ func (u *Uploader) do(addr string) {
 		w.Flush()
 	}
 	w.Flush()
+}
+
+func (u *Uploader) wait() {
+	<-u.uploaded
+}
+
+//
+
+func do(w *bufio.Writer, r *bufio.Reader, e *Executor, cmd string) error {
+	pasv := Pasv{}
+	pasv.Do(w, r)
+	s, err := r.ReadString('\n')
+
+	if err = checkResponse(s, err, "227"); err != nil {
+		return err
+	}
+
+	go (*e).do(parseAddress(s))
+
+	w.WriteString(cmd)
+	w.Flush()
+	s, err = r.ReadString('\n')
+
+	if err = checkResponse(s, err, "150"); err != nil {
+		return err
+	}
+
+	(*e).wait()
+
+	s, err = r.ReadString('\n')
+	if err = checkResponse(s, err, "226"); err != nil {
+		return err
+	}
+
+	return nil
 }
