@@ -80,7 +80,11 @@ func (ser *Server) Run() error {
 		switch strings.ToLower(cmd) {
 		case "list":
 			{
-				list := command.List{}
+				fmt.Println("Select path:")
+				path, _ := r.ReadString('\n')
+				path = path[:len(path)-1]
+
+				list := command.List{Path: path}
 				err := list.Do(ser.w, ser.r)
 				if err != nil {
 					fmt.Println(err.Error())
