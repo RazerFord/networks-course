@@ -68,16 +68,18 @@ func (ser *Server) Auth(name, pass string) error {
 }
 
 func (ser *Server) Run() error {
-	// list := command.List{}
-	// list.Do(ser.w, ser.r)
 
-	// retr := command.Retr{Source: "actorstoday.txt", Target: "./" + "actorstoday.txt"}
+	// retr := command.Retr{Source: "text.txt", Target: "./" + "text.txt"}
 	// err := retr.Do(ser.w, ser.r)
 	// fmt.Println(err)
 
 	stor := command.Stor{Source: "./hello.txt", Target: "hello.txt"}
 	err := stor.Do(ser.w, ser.r)
 	fmt.Println(err)
+
+	list := command.List{}
+	list.Do(ser.w, ser.r)
+
 	return nil
 }
 

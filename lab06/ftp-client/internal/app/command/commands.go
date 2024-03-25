@@ -32,6 +32,10 @@ func (u *User) Do(w *bufio.Writer, r *bufio.Reader) error {
 
 	s, err := r.ReadString('\n')
 
+	if err == nil && strings.HasPrefix(s, "220") {
+		s, err = r.ReadString('\n')
+	}
+
 	if err = checkResponse(s, err, "331"); err != nil {
 		return err
 	}
@@ -159,18 +163,20 @@ func (str *Stor) Do(w *bufio.Writer, r *bufio.Reader) error {
 		return err
 	}
 
-	u := Uploader{filename: str.Source}
+	u := Uploader{filename: str.Source, uploaded: make(chan struct{}, 1)}
 	go u.do(parseAddress(s))
 
 	w.WriteString(fmt.Sprintf("STOR %s\r\n", str.Target))
+	w.Flush()
 	s, err = r.ReadString('\n')
-	fmt.Println(fmt.Sprintf("STOR %s\r\n", str.Target))
 
 	if err = checkResponse(s, err, "150"); err != nil {
 		return err
 	}
 
+	fmt.Println("asdasd")
 	<-u.uploaded
+	fmt.Println("asdasd12")
 
 	s, err = r.ReadString('\n')
 	if err = checkResponse(s, err, "226"); err != nil {
@@ -218,6 +224,7 @@ type Printer struct {
 
 func (p *Printer) do(addr string) {
 	conn, err := net.Dial("tcp", addr)
+	defer func() { p.printed <- struct{}{} }()
 
 	if err != nil {
 		fmt.Println(err)
@@ -226,8 +233,6 @@ func (p *Printer) do(addr string) {
 
 	r := bufio.NewReader(conn)
 	printResult(r)
-
-	p.printed <- struct{}{}
 }
 
 func printResult(r *bufio.Reader) {
@@ -249,6 +254,7 @@ type Downloader struct {
 
 func (d *Downloader) do(addr string) {
 	conn, err := net.Dial("tcp", addr)
+	defer func() { d.downloaded <- struct{}{} }()
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -265,8 +271,6 @@ func (d *Downloader) do(addr string) {
 		buff.WriteByte(b)
 	}
 	os.WriteFile(d.dir, buff.Bytes(), fs.ModePerm)
-
-	d.downloaded <- struct{}{}
 }
 
 ////////////////////////////// Uploader //////////////////////////////
@@ -278,6 +282,7 @@ type Uploader struct {
 
 func (u *Uploader) do(addr string) {
 	conn, err := net.Dial("tcp", addr)
+	defer func() { u.uploaded <- struct{}{} }()
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -300,7 +305,7 @@ func (u *Uploader) do(addr string) {
 			return
 		}
 		bs = bs[:len(bs)-n]
+		w.Flush()
 	}
-
-	u.uploaded <- struct{}{}
+	w.Flush()
 }
