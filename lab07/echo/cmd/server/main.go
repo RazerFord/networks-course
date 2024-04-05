@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"math/rand"
@@ -12,15 +11,24 @@ import (
 	"echo/internal/app/logging"
 )
 
-const boundary = 0.2
+const (
+	boundary   = 0.2
+	packetSize = 1024
+)
 
 type Server struct {
 	conn *net.UDPConn
-	rw   *bufio.ReadWriter
 }
 
 func NewServer(port int) *Server {
-	conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4bcast, Port: port})
+	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", port))
+
+	if err != nil {
+		logging.Warn(err.Error())
+		os.Exit(1)
+	}
+
+	conn, err := net.ListenUDP("udp", addr)
 
 	if err != nil {
 		logging.Warn(err.Error())
@@ -28,24 +36,21 @@ func NewServer(port int) *Server {
 	}
 
 	logging.Info("server runs on address: %v:%v", net.IPv4bcast, port)
-	return &Server{
-		conn: conn,
-		rw:   bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn)),
-	}
+	return &Server{conn: conn}
 }
 
-func (s *Server) Read() (string, error) {
-	return s.rw.Reader.ReadString('\n')
+func (s *Server) Read() (string, net.Addr, error) {
+	buff := make([]byte, packetSize)
+	n, addr, err := (*s.conn).ReadFrom(buff)
+	return string(buff[:n]), addr, err
 }
 
-func (s *Server) Write(msg string) (int, error) {
-	n, err := s.rw.Writer.WriteString(msg)
-	s.rw.Writer.Flush()
-	return n, err
+func (s *Server) Write(addr net.Addr, msg string) (int, error) {
+	return (*s.conn).WriteTo([]byte(msg), addr)
 }
 
 func (s *Server) Close() {
-	s.conn.Close()
+	(*s.conn).Close()
 }
 
 func main() {
@@ -56,7 +61,7 @@ func main() {
 	defer s.Close()
 
 	for {
-		msg, err := s.Read()
+		msg, addr, err := s.Read()
 
 		if err != nil {
 			logging.Warn(err.Error())
@@ -65,10 +70,7 @@ func main() {
 		logging.Info("received message: %s", msg)
 
 		if rand.Float32() > boundary {
-			fmt.Println("BLOCKING")
-			_, err = s.Write(strings.ToUpper(msg))
-			fmt.Println(strings.ToUpper(msg)+"\n")
-			fmt.Println("UNBLOCKING")
+			_, err = s.Write(addr, strings.ToUpper(msg))
 			if err != nil {
 				logging.Warn(err.Error())
 			}
