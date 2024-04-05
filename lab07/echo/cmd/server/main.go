@@ -35,7 +35,7 @@ func NewServer(port int) *Server {
 		os.Exit(1)
 	}
 
-	logging.Info("server runs on address: %v:%v", net.IPv4bcast, port)
+	logging.Info("server runs on address: %v", conn.LocalAddr().String())
 	return &Server{conn: conn}
 }
 
