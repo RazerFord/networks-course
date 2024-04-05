@@ -136,7 +136,7 @@ Time-Sequence-Graph (Stevens) (Статистика => График TCP пото
 процентах).
 
 #### Демонстрация работы
-todo
+![task-ping](./images/task4.png)
 
 ### Г. UDP Heartbeat (4 балла)
 UDP Heartbeat (монитор доступности) подобен программе пингования. Он может быть
