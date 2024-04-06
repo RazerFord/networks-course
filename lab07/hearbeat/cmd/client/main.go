@@ -13,8 +13,6 @@ import (
 	"echo/internal/app/message"
 )
 
-const border = 0.2
-
 type Client struct {
 	conn *net.UDPConn
 	rw   bufio.ReadWriter
@@ -62,13 +60,14 @@ func (c *Client) Write(msg []byte) (int, error) {
 
 func main() {
 	port := flag.Int("port", 8080, "client port")
-	timeout := flag.Int("timeout", 600, "timeout in milliseconds")
+	timeout := flag.Int("timeout", 500, "timeout in milliseconds")
+	loss := flag.Float64("loss", 0.2, "packet loss ratio")
 	flag.Parse()
 
 	client := NewClient(*port)
 
 	for c := 0; ; c++ {
-		if rand.Float64() > border {
+		if rand.Float64() > *loss {
 			m := message.NewMessage(c, time.Now())
 			bs, err := message.ToBytes(m)
 			if err != nil {
