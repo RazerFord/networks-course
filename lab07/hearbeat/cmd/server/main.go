@@ -108,10 +108,10 @@ func main() {
 			logging.Warn(err.Error())
 		}
 
-		logging.Info("%s sent message: %s", addr.String(), msg)
+		logging.Info("message received from %s: %s", addr.String(), msg)
 
 		m := message.FromBytes([]byte(msg))
-		run(func ()  {
+		run(func() {
 			if mold, ok := clients[addr.String()]; ok {
 				clients[addr.String()] = m
 				if mold.Seq+1 != m.Seq {
