@@ -22,22 +22,9 @@ var (
 	mu                                  = sync.Mutex{}
 )
 
-func put(key string, m *message.Message) {
+func run(f func()) {
 	mu.Lock()
-	clients[key] = m
-	mu.Unlock()
-}
-
-func get(key string) (*message.Message, bool) {
-	mu.Lock()
-	m, ok := clients[key]
-	mu.Unlock()
-	return m, ok
-}
-
-func del(key string) {
-	mu.Lock()
-	delete(clients, key)
+	f()
 	mu.Unlock()
 }
 
@@ -91,21 +78,22 @@ func startDispatcher(ch chan Client) {
 		for {
 			cl := <-ch
 			time.Sleep(time.Until(cl.Deadline))
-			mu.Lock()
-			mnew, ok := clients[cl.Address]
 
-			if ok && mnew.Seq <= cl.Seq {
-				delete(clients, cl.Address)
-				logging.Info("client %s disconnected", cl.Address)
-			}
-			mu.Unlock()
+			run(func() {
+				mnew, ok := clients[cl.Address]
+
+				if ok && mnew.Seq <= cl.Seq {
+					delete(clients, cl.Address)
+					logging.Info("client %s disconnected", cl.Address)
+				}
+			})
 		}
 	}()
 }
 
 func main() {
 	port := flag.Int("port", 8080, "server port")
-	timeout := flag.Int("timeout", 1000, "timeout in milliseconds")
+	timeout := flag.Int("timeout", 2000, "timeout in milliseconds")
 	flag.Parse()
 
 	s := NewServer(*port)
@@ -123,14 +111,17 @@ func main() {
 		logging.Info("%s sent message: %s", addr.String(), msg)
 
 		m := message.FromBytes([]byte(msg))
-		if mold, ok := get(addr.String()); ok {
-			put(addr.String(), m)
-			if mold.Seq+1 != m.Seq {
-				logging.Info("%s lost packets [%d, %d)\n", addr.String(), mold.Seq+1, m.Seq)
+		run(func ()  {
+			if mold, ok := clients[addr.String()]; ok {
+				clients[addr.String()] = m
+				if mold.Seq+1 != m.Seq {
+					logging.Info("%s lost packets [%d, %d)\n", addr.String(), mold.Seq+1, m.Seq)
+				}
+			} else {
+				clients[addr.String()] = m
 			}
-		} else {
-			put(addr.String(), m)
-		}
+		})
+
 		ch <- Client{Address: addr.String(), Deadline: time.Now().Add(time.Millisecond * time.Duration(*timeout)), Message: m}
 	}
 }
