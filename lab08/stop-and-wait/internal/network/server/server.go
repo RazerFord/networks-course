@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"math/rand"
 	"net"
 	"stop-and-wait/internal/network/common"
 )
@@ -90,6 +91,9 @@ func (r *reader) internalWriteAck(addr net.Addr) (int, error) {
 	b, err := common.ToBytes(msg)
 	if err != nil {
 		panic(err)
+	}
+	if rand.Float32() < common.PacketLoss {
+		return len(b), nil
 	}
 	return r.udp.WriteTo(b, addr)
 }

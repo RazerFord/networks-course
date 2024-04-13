@@ -9,7 +9,7 @@ import (
 
 const (
 	PacketSize = 8   // 1024 bytes
-	PacketLoss = 0.0 // 0 <= probability <= 1
+	PacketLoss = 0.7 // 0 <= probability <= 1
 	HeaderSize = 9   // 9 bytes
 )
 
