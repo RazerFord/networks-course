@@ -19,12 +19,14 @@ func main() {
 	exitIfNotNil(err)
 
 	buff := make([]byte, 4)
-	s.Read(buff)
+	_, err = s.Read(buff)
+	exitIfNotNil(err)
 
 	l := binary.BigEndian.Uint32(buff)
 	buff = make([]byte, l)
+	_, err = s.Read(buff)
+	exitIfNotNil(err)
 
-	s.Read(buff)
 	os.WriteFile(*file, buff, fs.FileMode(0777))
 }
 

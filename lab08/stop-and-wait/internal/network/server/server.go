@@ -31,14 +31,18 @@ func Connect(address string, port int) (*Server, error) {
 
 func (s *Server) Read(p []byte) (n int, err error) {
 	r := newReader(s)
+	
 	for len(p) != 0 {
-		n1, fin, err := r.read(p[:])
+		var n1 int
+		var fin byte
+		n1, fin, err = r.read(p[:])
 		n += n1
 		if err != nil || fin == 1 {
 			return n, err
 		}
 		p = p[n1:]
 	}
+	r.read(p[:])
 	return n, err
 }
 
