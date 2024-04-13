@@ -1,13 +1,15 @@
 package main
 
 import (
-	"encoding/binary"
-	"fmt"
-	"math"
+	"stop-and-wait/internal/network/client"
+	"time"
 )
 
 func main() {
-	bs := make([]byte, 8)
-	binary.LittleEndian.PutUint32(bs, math.MaxUint32)
-	fmt.Println(bs)
+	cl, err := client.Connect("localhost", 9999, 1000*time.Millisecond)
+	if err != nil {
+		panic(err)
+	}
+	msg := "Hello world"
+	cl.Write([]byte(msg))
 }
