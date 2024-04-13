@@ -44,6 +44,7 @@ func (s *Server) Read(p []byte) (n int, err error) {
 	}
 	// try to read fin bit
 	r.read(p[:])
+	fmt.Printf("[ INFO ] number of packets received %d\n", r.curSeqNum)
 	return n, err
 }
 
@@ -73,6 +74,7 @@ func (r *reader) read(p []byte) (int, byte, error) {
 		}
 
 		if common.NextNum(r.curAckNum) == m.AckNum && r.curSeqNum+1 == m.SeqNum {
+			fmt.Printf("[ INFO ] received Ack %d\n", m.AckNum)
 			r.next()
 			r.internalWriteAck(addr)
 			n = int(m.Length)
@@ -83,6 +85,8 @@ func (r *reader) read(p []byte) (int, byte, error) {
 		}
 
 		r.internalWriteAck(addr)
+
+		fmt.Printf("[ ERROR ] expected Ack %d, but actual Ack %d\n", common.NextNum(r.curAckNum), m.AckNum)
 	}
 }
 

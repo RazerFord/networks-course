@@ -49,7 +49,7 @@ func (c *Client) Write(p []byte) (n int, err error) {
 	}
 	// send fin byte
 	s.write([]byte{}, 1)
-
+	fmt.Printf("[ INFO ] number of packets sent %d\n", c.curSeqNum)
 	return n, err
 }
 
@@ -92,8 +92,10 @@ func (s *sender) write(p []byte, fin byte) (int, error) {
 		}
 
 		if m.AckNum == msg.AckNum && m.SeqNum == s.curSeqNum {
+			fmt.Printf("[ INFO ] received Ack %d\n", msg.AckNum)
 			return toRealS(n), nil
 		}
+		fmt.Printf("[ ERROR ] expected Ack %d, but actual Ack %d\n", msg.AckNum, s.curAckNum)
 	}
 }
 
@@ -122,6 +124,7 @@ func (s *sender) internalRead(p []byte) (int, error) {
 	s.udp.SetDeadline(time.Now().Add(s.timeout))
 	n, err := s.udp.Read(p)
 	if errors.Is(err, os.ErrDeadlineExceeded) {
+		fmt.Println("[ ERROR ] timeout")
 		return n, fmt.Errorf("%w: %v", common.ErrHeader, err)
 	}
 	return n, err
