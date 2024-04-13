@@ -35,11 +35,11 @@ func Connect(address string, port int, timeout time.Duration) (*Client, error) {
 
 func (c *Client) Write(p []byte) (n int, err error) {
 	s := newSender(c)
-	for count := len(p); count != 0; count = len(p) {
+	for count, n1 := len(p), 0; count != 0; count = len(p) {
 		count = min(count, common.PacketSize)
 		packet := p[:count]
 
-		n1, err := s.write(packet, 0)
+		n1, err = s.write(packet, 0)
 		n += n1
 		if err != nil {
 			break

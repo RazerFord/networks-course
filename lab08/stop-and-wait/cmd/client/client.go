@@ -23,9 +23,12 @@ func main() {
 	exitIfNotNil(err)
 
 	s := binary.BigEndian.AppendUint32(nil, uint32(len(p)))
+
 	_, err = client.Write(s)
 	exitIfNotNil(err)
-	client.Write(p)
+
+	_, err = client.Write(p)
+	exitIfNotNil(err)
 }
 
 func exitIfNotNil(err error) {
