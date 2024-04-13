@@ -3,11 +3,10 @@ package main
 import (
 	"fmt"
 	"stop-and-wait/internal/network/server"
-	"time"
 )
 
 func main() {
-	s, err := server.Connect("localhost", 9999, 1000*time.Millisecond)
+	s, err := server.Connect("localhost", 9999)
 	if err != nil {
 		panic(err)
 	}
@@ -16,5 +15,5 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(p[:n])
+	fmt.Println(string(p[:n]))
 }

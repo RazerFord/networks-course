@@ -1,17 +1,16 @@
 package common
 
 import (
-	"bytes"
-	"encoding/gob"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
 )
 
 const (
-	PacketSize = 1024 // 1024 bytes
-	PacketLoss = 0.3  // 0 <= probability <= 1
-	HeaderSize = 8    // 8 bytes
+	PacketSize = 8   // 1024 bytes
+	PacketLoss = 0.0 // 0 <= probability <= 1
+	HeaderSize = 9   // 9 bytes
 )
 
 var (
@@ -20,10 +19,11 @@ var (
 )
 
 type Message struct {
-	AckNum   uint16 // 2 byte
-	SeqNum   uint16 // 2 byte
-	Checksum uint16 // 2 byte
-	Length   uint16 // 2 byte
+	AckNum   uint16 // 2 bytes
+	SeqNum   uint16 // 2 bytes
+	Checksum uint16 // 2 bytes
+	Length   uint16 // 2 bytes
+	Fin      byte   // 1 byte
 	Payload  []byte
 }
 
@@ -31,34 +31,51 @@ func ToRealSize(s int) int {
 	return s - HeaderSize
 }
 
-func NewMessage(a, s, c uint16, p []byte) *Message {
+func NewMessage(a, s, c uint16, f byte, p []byte) *Message {
 	return &Message{
 		AckNum:   a,
 		SeqNum:   s,
 		Checksum: c,
 		Length:   uint16(len(p)),
+		Fin:      f,
 		Payload:  p,
 	}
 }
 
 func ToBytes(m *Message) ([]byte, error) {
-	buff := bytes.Buffer{}
-	enc := gob.NewEncoder(&buff)
-	err := enc.Encode(m)
-	if err != nil {
-		return nil, err
-	}
-	return buff.Bytes(), nil
+	buff := []byte{}
+	buff = binary.BigEndian.AppendUint16(buff, m.AckNum)
+	buff = binary.BigEndian.AppendUint16(buff, m.SeqNum)
+	buff = binary.BigEndian.AppendUint16(buff, m.Checksum)
+	buff = binary.BigEndian.AppendUint16(buff, m.Length)
+	buff = append(buff, m.Fin)
+	buff = append(buff, m.Payload...)
+	return buff, nil
 }
 
 func FromBytes(p []byte) (*Message, error) {
-	enc := gob.NewDecoder(bytes.NewReader(p))
-	m := Message{}
-	err := enc.Decode(&m)
-	if err != nil {
-		return nil, err
+	if len(p) < HeaderSize {
+		return nil, ErrHeader
 	}
-	return &m, nil
+	ackNum := binary.BigEndian.Uint16(p)
+	p = p[2:]
+	seqNum := binary.BigEndian.Uint16(p)
+	p = p[2:]
+	checksum := binary.BigEndian.Uint16(p)
+	p = p[2:]
+	length := binary.BigEndian.Uint16(p)
+	p = p[2:]
+	fin := p[0]
+	p = p[1:]
+	return &Message{
+			AckNum:   ackNum,
+			SeqNum:   seqNum,
+			Checksum: checksum,
+			Length:   length,
+			Fin:      fin,
+			Payload:  p,
+		},
+		nil
 }
 
 type number interface {
