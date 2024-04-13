@@ -102,8 +102,10 @@ func (r *reader) internalWriteAck(addr net.Addr) (int, error) {
 		panic(err)
 	}
 	if rand.Float32() < common.PacketLoss {
+		fmt.Printf("[ INFO ] lost Ack %d\n", r.curAckNum)
 		return len(b), nil
 	}
+	fmt.Printf("[ INFO ] sent Ack %d\n", r.curAckNum)
 	return r.udp.WriteTo(b, addr)
 }
 

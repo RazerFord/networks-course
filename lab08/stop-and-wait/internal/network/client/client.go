@@ -110,6 +110,7 @@ func toRealS(s int) int {
 
 func (s *sender) internalWrite(p []byte) (int, error) {
 	if rand.Float32() < common.PacketLoss {
+		fmt.Printf("[ INFO ] lost Ack %d\n", s.curAckNum)
 		return len(p), nil
 	}
 	s.udp.SetDeadline(time.Now().Add(s.timeout))
@@ -117,6 +118,7 @@ func (s *sender) internalWrite(p []byte) (int, error) {
 	if n < common.HeaderSize {
 		return n, fmt.Errorf("%w: %w", common.ErrHeader, err)
 	}
+	fmt.Printf("[ INFO ] sent Ack %d\n", s.curAckNum)
 	return n, err
 }
 
