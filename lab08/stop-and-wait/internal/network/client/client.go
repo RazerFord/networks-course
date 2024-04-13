@@ -1,11 +1,8 @@
 package client
 
 import (
-	"errors"
 	"fmt"
-	"math/rand"
 	"net"
-	"os"
 	"stop-and-wait/internal/network/common"
 	"time"
 )
@@ -13,10 +10,9 @@ import (
 ////////////////////////////// Client //////////////////////////////
 
 type Client struct {
-	udp       *net.UDPConn
-	timeout   time.Duration
-	curAckNum uint16
-	curSeqNum uint16
+	udp     *net.UDPConn
+	timeout time.Duration
+	sender  *common.Sender
 }
 
 func Connect(address string, port int, timeout time.Duration) (*Client, error) {
@@ -30,16 +26,15 @@ func Connect(address string, port int, timeout time.Duration) (*Client, error) {
 		return nil, err
 	}
 
-	return &Client{conn, timeout, 0, 0}, nil
+	return &Client{conn, timeout, common.NewSender(conn, timeout)}, nil
 }
 
 func (c *Client) Write(p []byte) (n int, err error) {
-	s := newSender(c)
 	for count, n1 := len(p), 0; count != 0; count = len(p) {
 		count = min(count, common.PacketSize)
 		packet := p[:count]
 
-		n1, err = s.write(packet, 0)
+		n1, err = c.sender.Write(packet, 0)
 		n += n1
 		if err != nil {
 			break
@@ -48,91 +43,10 @@ func (c *Client) Write(p []byte) (n int, err error) {
 		p = p[n1:]
 	}
 	// send fin byte
-	s.write([]byte{}, 1)
-	fmt.Printf("[ INFO ] number of packets sent %d\n", c.curSeqNum)
+	c.sender.Write([]byte{}, 1)
+	fmt.Printf("[ INFO ] number of packets sent %d\n", c.sender.CurSeqNum)
 	return n, err
 }
-
-////////////////////////////// sender //////////////////////////////
-
-type sender struct {
-	*Client
-}
-
-func newSender(c *Client) *sender {
-	return &sender{c}
-}
-
-func (s *sender) write(p []byte, fin byte) (int, error) {
-	s.next()
-	for {
-		msg := common.NewMessage(s.curAckNum, s.curSeqNum, 0, fin, p)
-
-		p1, err := common.ToBytes(msg)
-		if err != nil {
-			panic(err)
-		}
-
-		n, err := s.internalWrite(p1)
-		if errors.Is(err, common.ErrHeader) {
-			continue
-		}
-
-		n1, err := s.internalRead(p1)
-		if err != nil {
-			if errors.Is(err, common.ErrHeader) {
-				continue
-			}
-			return 0, err
-		}
-
-		m, err := common.FromBytes(p1[:n1])
-		if err != nil {
-			continue
-		}
-
-		if m.AckNum == msg.AckNum && m.SeqNum == s.curSeqNum {
-			fmt.Printf("[ INFO ] received Ack %d\n", msg.AckNum)
-			return toRealS(n), nil
-		}
-		fmt.Printf("[ ERROR ] expected Ack %d, but actual Ack %d\n", msg.AckNum, s.curAckNum)
-	}
-}
-
-func (s *sender) next() {
-	s.curAckNum = common.NextNum(s.curAckNum)
-	s.curSeqNum++
-}
-
-func toRealS(s int) int {
-	return max(common.ToRealSize(s), 0)
-}
-
-func (s *sender) internalWrite(p []byte) (int, error) {
-	if rand.Float32() < common.PacketLoss {
-		fmt.Printf("[ INFO ] lost Ack %d\n", s.curAckNum)
-		return len(p), nil
-	}
-	s.udp.SetDeadline(time.Now().Add(s.timeout))
-	n, err := s.udp.Write(p)
-	if n < common.HeaderSize {
-		return n, fmt.Errorf("%w: %w", common.ErrHeader, err)
-	}
-	fmt.Printf("[ INFO ] sent Ack %d\n", s.curAckNum)
-	return n, err
-}
-
-func (s *sender) internalRead(p []byte) (int, error) {
-	s.udp.SetDeadline(time.Now().Add(s.timeout))
-	n, err := s.udp.Read(p)
-	if errors.Is(err, os.ErrDeadlineExceeded) {
-		fmt.Println("[ ERROR ] timeout")
-		return n, fmt.Errorf("%w: %v", common.ErrHeader, err)
-	}
-	return n, err
-}
-
-////////////////////////////// sender //////////////////////////////
 
 func min(a, b int) int {
 	if a < b {
