@@ -83,7 +83,7 @@ func (s *sender) write(p []byte, fin byte) (int, error) {
 			if errors.Is(err, common.ErrHeader) {
 				continue
 			}
-			return toRealS(n), err
+			return 0, err
 		}
 
 		m, err := common.FromBytes(p1[:n1])
