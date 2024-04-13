@@ -17,17 +17,18 @@ func main() {
 	flag.Parse()
 
 	p, err := os.ReadFile(*file)
-	exitIfNil(err)
+	exitIfNotNil(err)
 
 	client, err := client.Connect(*addr, *port, time.Duration(*timeout)*time.Millisecond)
-	exitIfNil(err)
+	exitIfNotNil(err)
 
 	s := binary.BigEndian.AppendUint32(nil, uint32(len(p)))
-	client.Write(s)
+	_, err = client.Write(s)
+	exitIfNotNil(err)
 	client.Write(p)
 }
 
-func exitIfNil(err error) {
+func exitIfNotNil(err error) {
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)

@@ -16,7 +16,7 @@ func main() {
 	flag.Parse()
 
 	s, err := server.Connect(*addr, *port)
-	exitIfNil(err)
+	exitIfNotNil(err)
 
 	buff := make([]byte, 4)
 	s.Read(buff)
@@ -25,10 +25,10 @@ func main() {
 	buff = make([]byte, l)
 
 	s.Read(buff)
-	os.WriteFile(*file, buff, fs.FileMode(777))
+	os.WriteFile(*file, buff, fs.FileMode(0777))
 }
 
-func exitIfNil(err error) {
+func exitIfNotNil(err error) {
 	if err != nil {
 		fmt.Println(err)
 		os.Exit(1)
