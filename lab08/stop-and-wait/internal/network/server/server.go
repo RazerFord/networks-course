@@ -31,7 +31,7 @@ func Connect(address string, port int) (*Server, error) {
 
 func (s *Server) Read(p []byte) (n int, err error) {
 	r := newReader(s)
-	
+
 	for len(p) != 0 {
 		var n1 int
 		var fin byte
@@ -42,6 +42,7 @@ func (s *Server) Read(p []byte) (n int, err error) {
 		}
 		p = p[n1:]
 	}
+	// try to read fin bit
 	r.read(p[:])
 	return n, err
 }
