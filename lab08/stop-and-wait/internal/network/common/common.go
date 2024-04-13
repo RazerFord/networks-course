@@ -11,9 +11,11 @@ import (
 const (
 	PacketSize = 1024 // 1024 bytes
 	PacketLoss = 0.3  // 0 <= probability <= 1
+	HeaderSize = 8    // 8 bytes
 )
 
 var (
+	ErrHeader    = errors.New("error header")
 	errPacketNum = errors.New("prev packet number must be 0 or 1")
 )
 
@@ -23,6 +25,20 @@ type Message struct {
 	Checksum uint16 // 2 byte
 	Length   uint16 // 2 byte
 	Payload  []byte
+}
+
+func ToRealSize(s int) int {
+	return s - HeaderSize
+}
+
+func NewMessage(a, s, c uint16, p []byte) *Message {
+	return &Message{
+		AckNum:   a,
+		SeqNum:   s,
+		Checksum: c,
+		Length:   uint16(len(p)),
+		Payload:  p,
+	}
 }
 
 func ToBytes(m *Message) ([]byte, error) {

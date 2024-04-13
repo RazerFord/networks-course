@@ -1,6 +1,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"net"
@@ -11,8 +12,10 @@ import (
 ////////////////////////////// Connection //////////////////////////////
 
 type Connection struct {
-	udp     *net.UDPConn
-	timeout time.Duration
+	udp       *net.UDPConn
+	timeout   time.Duration
+	curAckNum uint16
+	curSeqNum uint16
 }
 
 func Connect(address string, port int, timeout time.Duration) (*Connection, error) {
@@ -26,7 +29,7 @@ func Connect(address string, port int, timeout time.Duration) (*Connection, erro
 		return nil, err
 	}
 
-	return &Connection{conn, timeout}, nil
+	return &Connection{conn, timeout, 0, 0}, nil
 }
 
 func (c *Connection) Write(p []byte) (n int, err error) {
@@ -35,7 +38,8 @@ func (c *Connection) Write(p []byte) (n int, err error) {
 		count = min(count, common.PacketSize)
 		packet := p[:count]
 
-		n1, err := s.internalWrite(packet)
+		n1, err := s.write(packet)
+		n += n1
 		if err != nil {
 			return n, err
 		}
@@ -45,70 +49,88 @@ func (c *Connection) Write(p []byte) (n int, err error) {
 	return n, err
 }
 
-func (c *Connection) Read(p []byte) (int, error) {
-	return 0, nil
-}
-
 ////////////////////////////// sender //////////////////////////////
 
 type sender struct {
 	*Connection
-	curAckNum uint16
-	curSeqNum uint16
 }
 
 func newSender(c *Connection) *sender {
-	return &sender{c, 0, 0}
+	return &sender{c}
+}
+
+func (s *sender) write(p []byte) (int, error) {
+	s.next()
+	for {
+		msg := common.NewMessage(s.curAckNum, s.curSeqNum, 0, p)
+
+		p, err := common.ToBytes(msg)
+		if err != nil {
+			panic(err)
+		}
+
+		n, err := s.internalWrite(p)
+		if errors.Is(err, common.ErrHeader) {
+			continue
+		}
+		n = toRealS(n)
+
+		n1, err := s.internalRead(p)
+		if err != nil {
+			continue
+		}
+
+		m, err := common.FromBytes(p[:n1])
+		if err != nil {
+			continue
+		}
+
+		if m.AckNum == msg.AckNum && m.SeqNum == s.curSeqNum {
+			return n, nil
+		}
+	}
+}
+
+func (s *sender) next() {
+	s.curAckNum = common.NextNum(s.curAckNum)
+	s.curSeqNum++
+}
+
+func toRealS(s int) int {
+	return max(common.ToRealSize(s), 0)
 }
 
 func (s *sender) internalWrite(p []byte) (int, error) {
-	msg := common.Message{
-		s.curAckNum,
-		s.curSeqNum,
-		0,
-		uint16(len(p)),
-		p,
-	}
-
-	p, err := common.ToBytes(&msg)
-	if err != nil {
-		panic(err)
-	}
-
-	n, err := s.writeLoss(p)
-	if err != nil {
-		return n, err
-	}
-
-	for {
-		s.udp.SetDeadline(time.Now().Add(s.timeout))
-		n, err = s.udp.Read(p)
-
-		if err == nil {
-			m, err := common.FromBytes(p[:n])
-			if err != nil {
-				panic(err)
-			}
-			if m.AckNum == msg.AckNum+1 && m.SeqNum == msg.SeqNum+1 {
-				break
-			}
-		}
-	}
-	msg.AckNum = common.NextNum(msg.AckNum)
-	s.curSeqNum++
-
-	return n, nil
-}
-
-func (s *sender) writeLoss(p []byte) (int, error) {
 	if rand.Float32() < common.PacketLoss {
 		return len(p), nil
 	}
-	return s.udp.Write(p)
+	n, err := s.udp.Write(p)
+	if n <= common.HeaderSize {
+		return n, fmt.Errorf("%w: %w", common.ErrHeader, err)
+	}
+	return n, err
 }
+
+func (s *sender) internalRead(p []byte) (int, error) {
+	s.udp.SetDeadline(time.Now().Add(s.timeout))
+	n, err := s.udp.Read(p)
+	if n <= common.HeaderSize {
+		return n, fmt.Errorf("%w: %w", common.ErrHeader, err)
+	}
+	return n, err
+}
+
+////////////////////////////// sender //////////////////////////////
 
 func min(a, b int) int {
 	if a < b {
+		return a
+	}
+	return b
+}
+
+func max(a, b int) int {
+	if a > b {
 		return a
 	}
 	return b
