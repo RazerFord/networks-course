@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+////////////////////////////// Server //////////////////////////////
+
 type Server struct {
 	udp       *net.UDPConn
 	timeout   time.Duration
@@ -42,6 +44,8 @@ func (s *Server) Read(p []byte) (n int, err error) {
 	}
 	return n, err
 }
+
+////////////////////////////// reader //////////////////////////////
 
 type reader struct {
 	*Server
