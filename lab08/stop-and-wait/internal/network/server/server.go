@@ -30,7 +30,7 @@ func Connect(address string, port int, timeout time.Duration) (*Server, error) {
 	return &Server{conn, timeout, 0, 0}, nil
 }
 
-func (s *Server) Write(p []byte) (n int, err error) {
+func (s *Server) Read(p []byte) (n int, err error) {
 	r := newReader(s)
 	for len(p) != 0 {
 		n1, err := r.read(p)
@@ -52,24 +52,26 @@ func newReader(s *Server) *reader {
 }
 
 func (r *reader) read(p []byte) (int, error) {
+	tmpBuff := make([]byte, common.HeaderSize+common.PacketSize)
 	for {
-		n, addr, err := r.internalRead(p)
+		n, addr, err := r.internalRead(tmpBuff)
 		if err != nil {
 			r.internalWriteAck(addr)
 			continue
 		}
 
-		m, err := common.FromBytes(p[:n])
+		m, err := common.FromBytes(tmpBuff[:n])
 		if err != nil {
+			r.internalWriteAck(addr)
 			continue
 		}
 
 		if common.NextNum(r.curAckNum) == m.AckNum && r.curSeqNum+1 == m.SeqNum {
 			r.next()
-			r.internalWriteAck()
+			r.internalWriteAck(addr)
 			n = int(m.Length)
 			io.CopyN(bytes.NewBuffer(p), bytes.NewBuffer(m.Payload), int64(n))
-			return n, nil
+			return common.ToRealSize(n), nil
 		}
 
 		r.internalWriteAck(addr)
