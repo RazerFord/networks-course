@@ -21,6 +21,7 @@ func main() {
 	exitIfNotNil(err)
 
 	// receiving a message
+	fmt.Println("Begin receiving")
 
 	buff := make([]byte, 4)
 	_, _, err = s.Read(buff)
@@ -28,20 +29,21 @@ func main() {
 
 	l := binary.BigEndian.Uint32(buff)
 	buff = make([]byte, l)
-	_, a, err := s.Read(buff)
+	_, _, err = s.Read(buff)
 	exitIfNotNil(err)
 
 	os.WriteFile(*file, buff, fs.FileMode(0777))
 
 	// sending a message
+	// fmt.Println("Begin sending")
 
-	size := binary.BigEndian.AppendUint32(nil, uint32(len(buff)))
+	// size := binary.BigEndian.AppendUint32(nil, uint32(len(buff)))
 
-	_, err = s.Write(size, a)
-	exitIfNotNil(err)
+	// _, err = s.Write(size, a)
+	// exitIfNotNil(err)
 
-	_, err = s.Write(buff, a)
-	exitIfNotNil(err)
+	// _, err = s.Write(buff, a)
+	// exitIfNotNil(err)
 }
 
 func exitIfNotNil(err error) {
