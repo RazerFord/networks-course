@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
-	// "io/fs"
+	"io/fs"
 	"os"
 	"stop-and-wait/internal/network/client"
 	"time"
@@ -35,20 +35,21 @@ func main() {
 	exitIfNotNil(err)
 
 	// receiving a message
-	// fmt.Println("Begin receiving")
+	fmt.Println("Begin receiving")
 
-	// p = make([]byte, 4)
+	p = make([]byte, 4)
 
-	// _, err = c.Read(p)
-	// exitIfNotNil(err)
+	_, err = c.Read(p)
+	exitIfNotNil(err)
 
-	// l := binary.BigEndian.Uint32(p)
-	// p = make([]byte, l)
+	l := binary.BigEndian.Uint32(p)
+	p = make([]byte, l)
 
-	// _, err = c.Read(p)
-	// exitIfNotNil(err)
+	_, err = c.Read(p)
+	exitIfNotNil(err)
 
-	// os.WriteFile("asdasdasd.jpeg", p, fs.FileMode(0777))
+	os.WriteFile("asdasdasd.jpeg", p, fs.FileMode(0777))
+	time.Sleep(1000 * time.Minute)
 }
 
 func exitIfNotNil(err error) {

@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	PacketSize = 1024 // 1024 bytes
-	PacketLoss = 0.3  // 0 <= probability <= 1
+	PacketSize = 2048 // 1024 bytes
+	PacketLoss = 0.8  // 0 <= probability <= 1
 	HeaderSize = 9    // 9 bytes
 )
 
@@ -154,6 +154,7 @@ func NewSAW() *SAW {
 	go func(saw *SAW) {
 		for {
 			cmd := <-saw.cmd
+			var resp *Response
 			switch cmd.Command {
 			case Send:
 				{
@@ -168,7 +169,7 @@ func NewSAW() *SAW {
 							if errors.Is(err, os.ErrDeadlineExceeded) {
 								continue
 							}
-							saw.res <- &Response{cmd.Body, nil, 0, 0, err}
+							resp = &Response{cmd.Body, nil, 0, 0, err}
 							break
 						}
 
@@ -179,7 +180,7 @@ func NewSAW() *SAW {
 							if errors.Is(err, os.ErrDeadlineExceeded) {
 								continue
 							}
-							saw.res <- &Response{cmd.Body, nil, 0, 0, err}
+							resp = &Response{cmd.Body, nil, 0, 0, err}
 							break
 						}
 						msg, err = FromBytes(ack)
@@ -190,8 +191,11 @@ func NewSAW() *SAW {
 						if msg.AckNum == saw.curAckNum && msg.SeqNum == saw.curSeqNum {
 							saw.curAckNum = NextNum(saw.curAckNum)
 							saw.curSeqNum = saw.curSeqNum + 1
-							saw.res <- &Response{cmd.Body, nil, int(cmd.Body.Length), cmd.Body.Fin, nil}
+							resp = &Response{cmd.Body, nil, int(cmd.Body.Length), cmd.Body.Fin, nil}
 							break
+						}
+						if ack, ok := saw.cache[msg.SeqNum]; ok {
+							cmd.sendAck(ack, msg.SeqNum, cmd.Body.Addr)
 						}
 					}
 				}
@@ -207,7 +211,7 @@ func NewSAW() *SAW {
 							if errors.Is(err, os.ErrDeadlineExceeded) {
 								continue
 							}
-							saw.res <- &Response{cmd.Body, nil, 0, 0, err}
+							resp = &Response{cmd.Body, nil, 0, 0, err}
 							break
 						}
 						if n < HeaderSize {
@@ -227,7 +231,7 @@ func NewSAW() *SAW {
 							for i := range n {
 								cmd.Body.Payload[i] = msg.Payload[i]
 							}
-							saw.res <- &Response{cmd.Body, addr, n, msg.Fin, nil}
+							resp = &Response{cmd.Body, addr, n, msg.Fin, nil}
 							break
 						}
 						if ack, ok := saw.cache[msg.SeqNum]; ok {
@@ -238,6 +242,7 @@ func NewSAW() *SAW {
 					}
 				}
 			}
+			saw.res <- resp
 		}
 	}(saw)
 	return saw

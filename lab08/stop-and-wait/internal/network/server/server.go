@@ -115,5 +115,22 @@ func NewSender(udp *net.UDPConn, saw *common.SAW, d time.Duration) *Sender {
 }
 
 func (s *Sender) Write(p []byte, fin byte, addr net.Addr) (int, error) {
-	panic("non implemented")
+	body := common.NewBody(addr, p, fin)
+	s.saw.Put(common.Send, body, s.read, s.send)
+	resp := s.saw.Get()
+	return resp.Bytes, resp.Err
+}
+
+func (s *Sender) read(b []byte) (int, net.Addr, error) {
+	s.udp.SetReadDeadline(time.Now().Add(s.timeout))
+	n, addr, err := s.udp.ReadFrom(b)
+	s.udp.SetReadDeadline(time.Time{})
+	return n, addr, err
+}
+
+func (s *Sender) send(b []byte, addr net.Addr) (int, error) {
+	if rand.Float32() < common.PacketLoss {
+		return len(b), nil
+	}
+	return s.udp.WriteTo(b, addr)
 }

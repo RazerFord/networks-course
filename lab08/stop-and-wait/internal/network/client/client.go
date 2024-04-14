@@ -98,6 +98,7 @@ func (s *Sender) read(b []byte) (int, net.Addr, error) {
 	s.udp.SetReadDeadline(time.Time{})
 	return n, addr, err
 }
+
 func (s *Sender) send(b []byte, _ net.Addr) (int, error) {
 	if rand.Float32() < common.PacketLoss {
 		return len(b), nil
