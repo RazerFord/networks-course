@@ -28,15 +28,29 @@ func Connect(address string, port int, timeout time.Duration) (*Client, error) {
 		return nil, err
 	}
 
-	saw := common.NewSAW()
+	c := &Client{
+		udp:     conn,
+		timeout: timeout,
+	}
+	saw := common.NewSAW(c.read, c.send)
+	c.sender = NewSender(conn, saw, timeout)
+	c.reader = NewReader(conn, saw)
 
-	return &Client{
-			udp:     conn,
-			timeout: timeout,
-			sender:  NewSender(conn, saw, timeout),
-			reader:  NewReader(conn, saw),
-		},
-		nil
+	return c, nil
+}
+
+func (c *Client) read(b []byte) (int, net.Addr, error) {
+	c.udp.SetReadDeadline(time.Now().Add(c.timeout))
+	n, err := c.udp.Read(b)
+	c.udp.SetReadDeadline(time.Time{})
+	return n, nil, err
+}
+
+func (c *Client) send(b []byte, _ net.Addr) (int, error) {
+	if rand.Float32() < common.PacketLoss {
+		return len(b), nil
+	}
+	return c.udp.Write(b)
 }
 
 func (c *Client) Write(p []byte) (n int, err error) {
@@ -128,6 +142,7 @@ func (r *Reader) read(b []byte) (int, net.Addr, error) {
 	n, err := r.udp.Read(b)
 	return n, nil, err
 }
+
 func (r *Reader) send(b []byte, _ net.Addr) (int, error) {
 	if rand.Float32() < common.PacketLoss {
 		return len(b), nil

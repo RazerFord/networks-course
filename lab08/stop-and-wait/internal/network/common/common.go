@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"sync"
 )
 
 const (
@@ -144,16 +145,44 @@ type Response struct {
 type SAW struct {
 	curAckNum uint16
 	curSeqNum uint16
-	cache     map[uint16]uint16
+	mtx       sync.Mutex
+	cache     sync.Map
 	cmd       chan entity
 	res       chan *Response
 }
 
-func NewSAW() *SAW {
-	saw := &SAW{0, 0, make(map[uint16]uint16), make(chan entity, 1), make(chan *Response, 1)}
+func NewSAW(read func([]byte) (int, net.Addr, error), send func([]byte, net.Addr) (int, error)) *SAW {
+	saw := &SAW{0, 0, sync.Mutex{}, sync.Map{}, make(chan entity, 1), make(chan *Response, 1)}
+
+	go func(saw *SAW) {
+		for {
+			saw.mtx.Lock()
+			tmpBuff := make([]byte, HeaderSize+PacketSize)
+			n, addr, _ := read(tmpBuff)
+			if n == 0 {
+				saw.mtx.Unlock()
+				continue
+			}
+			msg, err := FromBytes(tmpBuff[:n])
+			if err != nil {
+				saw.mtx.Unlock()
+				continue
+			}
+
+			if ack, ok := saw.cache.Load(msg.SeqNum); ok {
+				fmt.Printf("[ INFO ] send Ack %d SeqNum %d\n", ack, msg.SeqNum)
+				msg := NewMessage(ack.(uint16), msg.SeqNum, 0, 0, []byte{})
+				b, err := ToBytes(msg)
+				exitIfNotNil(err)
+				send(b, addr)
+			}
+			saw.mtx.Unlock()
+		}
+	}(saw)
 	go func(saw *SAW) {
 		for {
 			cmd := <-saw.cmd
+			saw.mtx.Lock()
 			var resp *Response
 			switch cmd.Command {
 			case Send:
@@ -185,7 +214,7 @@ func NewSAW() *SAW {
 						}
 						msg, err = FromBytes(ack)
 						exitIfNotNil(err)
-						fmt.Printf("[ INFO ] read {Ack: %d, SeqNum: %d}; expected: {Ack: %d, SeqNum: %d}\n", msg.AckNum, msg.SeqNum, saw.curAckNum, saw.curSeqNum)
+						fmt.Printf("[ INFO ] actual {Ack: %d, SeqNum: %d}; expected: {Ack: %d, SeqNum: %d}\n", msg.AckNum, msg.SeqNum, saw.curAckNum, saw.curSeqNum)
 
 						// check ackNum and seqNum
 						if msg.AckNum == saw.curAckNum && msg.SeqNum == saw.curSeqNum {
@@ -194,8 +223,8 @@ func NewSAW() *SAW {
 							resp = &Response{cmd.Body, nil, int(cmd.Body.Length), cmd.Body.Fin, nil}
 							break
 						}
-						if ack, ok := saw.cache[msg.SeqNum]; ok {
-							cmd.sendAck(ack, msg.SeqNum, cmd.Body.Addr)
+						if ack, ok := saw.cache.Load(msg.SeqNum); ok {
+							cmd.sendAck(ack.(uint16), msg.SeqNum, cmd.Body.Addr)
 						}
 					}
 				}
@@ -224,7 +253,7 @@ func NewSAW() *SAW {
 
 						if expAck == msg.AckNum && expSeq == msg.SeqNum {
 							cmd.sendAck(expAck, expSeq, addr)
-							saw.cache[expSeq] = expAck
+							saw.cache.Store(expSeq, expAck)
 							saw.curAckNum = NextNum(expAck)
 							saw.curSeqNum = expSeq + 1
 							n = int(msg.Length)
@@ -234,8 +263,8 @@ func NewSAW() *SAW {
 							resp = &Response{cmd.Body, addr, n, msg.Fin, nil}
 							break
 						}
-						if ack, ok := saw.cache[msg.SeqNum]; ok {
-							cmd.sendAck(ack, msg.SeqNum, addr)
+						if ack, ok := saw.cache.Load(msg.SeqNum); ok {
+							cmd.sendAck(ack.(uint16), msg.SeqNum, addr)
 						} else {
 							cmd.sendAck(expAck, expSeq, addr)
 						}
@@ -243,6 +272,7 @@ func NewSAW() *SAW {
 				}
 			}
 			saw.res <- resp
+			saw.mtx.Unlock()
 		}
 	}(saw)
 	return saw

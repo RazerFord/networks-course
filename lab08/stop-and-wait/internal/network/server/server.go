@@ -12,12 +12,12 @@ import (
 
 type Server struct {
 	udp      *net.UDPConn
-	duration time.Duration
+	timeout time.Duration
 	reader   *Reader
 	sender   *Sender
 }
 
-func Connect(address string, port int, duration time.Duration) (*Server, error) {
+func Connect(address string, port int, timeout time.Duration) (*Server, error) {
 	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf("%s:%d", address, port))
 	if err != nil {
 		return nil, err
@@ -28,15 +28,30 @@ func Connect(address string, port int, duration time.Duration) (*Server, error) 
 		return nil, err
 	}
 
-	saw := common.NewSAW()
+	s := &Server{
+		udp:      conn,
+		timeout: timeout,
+	}
+	saw := common.NewSAW(s.read, s.send)
 
-	return &Server{
-			udp:      conn,
-			duration: duration,
-			reader:   NewReader(conn, saw),
-			sender:   NewSender(conn, saw, duration),
-		},
-		nil
+	s.reader = NewReader(conn, saw)
+	s.sender = NewSender(conn, saw, timeout)
+
+	return s, nil
+}
+
+func (s *Server) read(b []byte) (int, net.Addr, error) {
+	s.udp.SetReadDeadline(time.Now().Add(s.timeout))
+	n, addr, err := s.udp.ReadFrom(b)
+	s.udp.SetReadDeadline(time.Time{})
+	return n, addr, err
+}
+
+func (s *Server) send(b []byte, addr net.Addr) (int, error) {
+	if rand.Float32() < common.PacketLoss {
+		return len(b), nil
+	}
+	return s.udp.WriteTo(b, addr)
 }
 
 func (s *Server) Read(p []byte) (n int, addr net.Addr, err error) {

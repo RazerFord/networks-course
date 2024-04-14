@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"stop-and-wait/internal/network/client"
+	"strings"
 	"time"
 )
 
@@ -48,8 +49,9 @@ func main() {
 	_, err = c.Read(p)
 	exitIfNotNil(err)
 
-	os.WriteFile("asdasdasd.jpeg", p, fs.FileMode(0777))
-	time.Sleep(1000 * time.Minute)
+	arr := strings.Split(*file, ".")
+	os.WriteFile(fmt.Sprintf("received.%s", arr[len(arr)-1]), p, fs.FileMode(0777))
+	time.Sleep(5 * time.Second)
 }
 
 func exitIfNotNil(err error) {
