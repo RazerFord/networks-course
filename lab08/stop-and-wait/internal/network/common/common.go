@@ -50,11 +50,11 @@ func ToRealSize(s int) int {
 	return s - HeaderSize
 }
 
-func NewMessage(a, s, c uint16, f byte, p []byte) *Message {
+func NewMessage(a, s uint16, f byte, p []byte) *Message {
 	return &Message{
 		AckNum:   a,
 		SeqNum:   s,
-		Checksum: c,
+		Checksum: ToChecksum(p),
 		Length:   uint16(len(p)),
 		Fin:      f,
 		Payload:  p,
@@ -129,7 +129,7 @@ type entity struct {
 
 func (e *entity) sendAck(ack, seq uint16, addr net.Addr) {
 	fmt.Printf("[ INFO ] send Ack %d SeqNum %d\n", ack, seq)
-	msg := NewMessage(ack, seq, 0, 0, []byte{})
+	msg := NewMessage(ack, seq, 0, []byte{})
 	b, err := ToBytes(msg)
 	exitIfNotNil(err)
 	e.Send(b, addr)
@@ -172,7 +172,7 @@ func NewSAW(read func([]byte) (int, net.Addr, error), send func([]byte, net.Addr
 
 			if ack, ok := saw.cache.Load(msg.SeqNum); ok {
 				fmt.Printf("[ INFO ] send Ack %d SeqNum %d\n", ack, msg.SeqNum)
-				msg := NewMessage(ack.(uint16), msg.SeqNum, 0, 0, []byte{})
+				msg := NewMessage(ack.(uint16), msg.SeqNum, 0, []byte{})
 				b, err := ToBytes(msg)
 				exitIfNotNil(err)
 				send(b, addr)
@@ -190,7 +190,7 @@ func NewSAW(read func([]byte) (int, net.Addr, error), send func([]byte, net.Addr
 				{
 					for {
 						// send message //
-						msg := NewMessage(saw.curAckNum, saw.curSeqNum, 0, cmd.Body.Fin, cmd.Body.Payload)
+						msg := NewMessage(saw.curAckNum, saw.curSeqNum, cmd.Body.Fin, cmd.Body.Payload)
 						buff, err := ToBytes(msg)
 						exitIfNotNil(err)
 
@@ -218,11 +218,15 @@ func NewSAW(read func([]byte) (int, net.Addr, error), send func([]byte, net.Addr
 						fmt.Printf("[ INFO ] actual {Ack: %d, SeqNum: %d}; expected: {Ack: %d, SeqNum: %d}\n", msg.AckNum, msg.SeqNum, saw.curAckNum, saw.curSeqNum)
 
 						// check ackNum and seqNum
-						if msg.AckNum == saw.curAckNum && msg.SeqNum == saw.curSeqNum {
+						check := CheckChecksum(msg.Payload, msg.Checksum)
+						if msg.AckNum == saw.curAckNum && msg.SeqNum == saw.curSeqNum && check {
 							saw.curAckNum = NextNum(saw.curAckNum)
 							saw.curSeqNum = saw.curSeqNum + 1
 							resp = &Response{cmd.Body, nil, int(cmd.Body.Length), cmd.Body.Fin, nil}
 							break
+						}
+						if !check {
+							fmt.Printf("[ ERROR ] actual Checksum %d; expected Checksum %d\n", ToChecksum(msg.Payload), msg.Checksum)
 						}
 						if ack, ok := saw.cache.Load(msg.SeqNum); ok {
 							cmd.sendAck(ack.(uint16), msg.SeqNum, cmd.Body.Addr)
@@ -252,7 +256,8 @@ func NewSAW(read func([]byte) (int, net.Addr, error), send func([]byte, net.Addr
 						msg, err := FromBytes(tmpBuff[:n])
 						exitIfNotNil(err)
 
-						if expAck == msg.AckNum && expSeq == msg.SeqNum {
+						check := CheckChecksum(msg.Payload, msg.Checksum)
+						if expAck == msg.AckNum && expSeq == msg.SeqNum && check {
 							cmd.sendAck(expAck, expSeq, addr)
 							saw.cache.Store(expSeq, expAck)
 							saw.curAckNum = NextNum(expAck)
@@ -263,6 +268,9 @@ func NewSAW(read func([]byte) (int, net.Addr, error), send func([]byte, net.Addr
 							}
 							resp = &Response{cmd.Body, addr, n, msg.Fin, nil}
 							break
+						}
+						if !check {
+							fmt.Printf("[ ERROR ] actual Checksum %d; expected Checksum %d\n", ToChecksum(msg.Payload), msg.Checksum)
 						}
 						if ack, ok := saw.cache.Load(msg.SeqNum); ok {
 							cmd.sendAck(ack.(uint16), msg.SeqNum, addr)
@@ -304,13 +312,25 @@ func ToChecksum(data []byte) uint16 {
 	for len(data) != 0 {
 		if len(data) > 1 {
 			cs += binary.BigEndian.Uint16(data)
+			data = data[2:]
 		} else {
 			cs += uint16(data[0])
+			data = data[1:]
 		}
 	}
 	return cs ^ math.MaxUint16
 }
 
 func CheckChecksum(data []byte, checksum uint16) bool {
-	return (ToChecksum(data) | checksum) == math.MaxUint16
+	var cs uint16 = 0
+	for len(data) != 0 {
+		if len(data) > 1 {
+			cs += binary.BigEndian.Uint16(data)
+			data = data[2:]
+		} else {
+			cs += uint16(data[0])
+			data = data[1:]
+		}
+	}
+	return (cs ^ checksum) == math.MaxUint16
 }
