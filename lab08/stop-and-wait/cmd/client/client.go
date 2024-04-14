@@ -15,7 +15,7 @@ func main() {
 	addr := flag.String("address", "localhost", "server address")
 	port := flag.Int("port", 8888, "server port")
 	timeout := flag.Int64("timeout", 100, "time-out")
-	file := flag.String("file", "/home/razerford/Рабочий стол/networks/networks-course/lab08/stop-and-wait/assets/images.jpeg", "file name")
+	file := flag.String("file", "", "file name")
 	flag.Parse()
 
 	p, err := os.ReadFile(*file)
