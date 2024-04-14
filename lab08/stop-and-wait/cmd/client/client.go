@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"flag"
 	"fmt"
+	"io/fs"
 	"os"
 	"stop-and-wait/internal/network/client"
 	"time"
@@ -19,19 +20,33 @@ func main() {
 	p, err := os.ReadFile(*file)
 	exitIfNotNil(err)
 
-	client, err := client.Connect(*addr, *port, time.Duration(*timeout)*time.Millisecond)
+	c, err := client.Connect(*addr, *port, time.Duration(*timeout)*time.Millisecond)
 	exitIfNotNil(err)
+
+	// sending a message
 
 	s := binary.BigEndian.AppendUint32(nil, uint32(len(p)))
 
-	_, err = client.Write(s)
+	_, err = c.Write(s)
 	exitIfNotNil(err)
 
-	_, err = client.Write(p)
+	_, err = c.Write(p)
 	exitIfNotNil(err)
 
-	_, err = client.Read(p)
+	// receiving a message
+
+	p = make([]byte, 4)
+
+	_, err = c.Read(p)
 	exitIfNotNil(err)
+
+	l := binary.BigEndian.Uint32(p)
+	p = make([]byte, l)
+
+	_, err = c.Read(p)
+	exitIfNotNil(err)
+
+	os.WriteFile("asdasdasd.jpeg", p, fs.FileMode(0777))
 }
 
 func exitIfNotNil(err error) {

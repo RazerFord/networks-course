@@ -17,8 +17,10 @@ func main() {
 	file := flag.String("file", "", "file name")
 	flag.Parse()
 
-	s, err := server.Connect(*addr, *port, time.Duration(*timeout) * time.Millisecond)
+	s, err := server.Connect(*addr, *port, time.Duration(*timeout)*time.Millisecond)
 	exitIfNotNil(err)
+
+	// receiving a message
 
 	buff := make([]byte, 4)
 	_, _, err = s.Read(buff)
@@ -29,10 +31,17 @@ func main() {
 	_, a, err := s.Read(buff)
 	exitIfNotNil(err)
 
-	_, err = s.Write(buff, a)
+	os.WriteFile(*file, buff, fs.FileMode(0777))
+
+	// sending a message
+
+	size := binary.BigEndian.AppendUint32(nil, uint32(len(buff)))
+
+	_, err = s.Write(size, a)
 	exitIfNotNil(err)
 
-	os.WriteFile(*file, buff, fs.FileMode(0777))
+	_, err = s.Write(buff, a)
+	exitIfNotNil(err)
 }
 
 func exitIfNotNil(err error) {

@@ -15,7 +15,7 @@ import (
 type Server struct {
 	udp      *net.UDPConn
 	duration time.Duration
-	reader   *common.Reader
+	reader   *Reader
 	sender   *Sender
 }
 
@@ -33,7 +33,7 @@ func Connect(address string, port int, duration time.Duration) (*Server, error) 
 	return &Server{
 			udp:      conn,
 			duration: duration,
-			reader:   common.NewReader(conn),
+			reader:   NewReader(conn),
 			sender:   NewSender(conn, duration),
 		},
 		nil
@@ -75,6 +75,84 @@ func (s *Server) Write(p []byte, addr net.Addr) (n int, err error) {
 	return n, err
 }
 
+////////////////////////////// Reader //////////////////////////////
+
+type Reader struct {
+	udp       *net.UDPConn
+	CurAckNum uint16
+	CurSeqNum uint16
+}
+
+func NewReader(udp *net.UDPConn) *Reader {
+	return &Reader{udp, 0, 0}
+}
+
+func (r *Reader) Read(p []byte) (int, byte, net.Addr, error) {
+	tmpBuff := make([]byte, common.HeaderSize+common.PacketSize)
+	for {
+		n, addr, err := r.internalRead(tmpBuff)
+		if err != nil {
+			r.internalWriteAck(addr)
+			continue
+		}
+
+		m, err := common.FromBytes(tmpBuff[:n])
+		if err != nil {
+			r.internalWriteAck(addr)
+			continue
+		}
+
+		expAck := common.NextNum(r.CurAckNum)
+		expSeq := r.CurSeqNum + 1
+		if expAck == m.AckNum && expSeq == m.SeqNum {
+			fmt.Printf("[ INFO ] received Ack %d SeqNum %d\n", m.AckNum, m.SeqNum)
+			r.next()
+			r.internalWriteAck(addr)
+			n = int(m.Length)
+			for i := range m.Length {
+				p[i] = m.Payload[i]
+			}
+			return n, m.Fin, addr, nil
+		}
+		if expAck != m.AckNum {
+			fmt.Printf("[ ERROR ] expected Ack %d, but actual Ack %d\n", expAck, m.AckNum)
+		}
+		if expSeq != m.SeqNum {
+			fmt.Printf("[ ERROR ] expected SeqNum %d, but actual SeqNum %d\n", expSeq, m.SeqNum)
+		}
+		r.internalWriteAck(addr)
+	}
+}
+
+func (r *Reader) next() {
+	r.CurAckNum = common.NextNum(r.CurAckNum)
+	r.CurSeqNum++
+}
+
+func (r *Reader) internalWriteAck(addr net.Addr) (int, error) {
+	msg := common.NewMessage(r.CurAckNum, r.CurSeqNum, 0, 0, []byte{})
+	b, err := common.ToBytes(msg)
+	if err != nil {
+		panic(err)
+	}
+	if rand.Float32() < common.PacketLoss {
+		fmt.Printf("[ INFO ] lost Ack %d SeqNum %d\n", r.CurAckNum, r.CurSeqNum)
+		return len(b), nil
+	}
+	fmt.Printf("[ INFO ] sent Ack %d SeqNum %d\n", r.CurAckNum, r.CurSeqNum)
+	return r.udp.WriteTo(b, addr)
+}
+
+func (r *Reader) internalRead(p []byte) (int, net.Addr, error) {
+	n, addr, err := r.udp.ReadFrom(p)
+	if n < common.HeaderSize {
+		return n, addr, fmt.Errorf("%w: %w", common.ErrHeader, err)
+	}
+	return n, addr, err
+}
+
+////////////////////////////// Sender //////////////////////////////
+
 type Sender struct {
 	udp       *net.UDPConn
 	timeout   time.Duration
@@ -115,12 +193,17 @@ func (s *Sender) Write(p []byte, fin byte, addr net.Addr) (int, error) {
 			continue
 		}
 
-		if m.AckNum == msg.AckNum && m.SeqNum == s.CurSeqNum {
-			fmt.Printf("[ INFO ] received Ack %d\n", msg.AckNum)
+		if m.AckNum == s.CurAckNum && m.SeqNum == s.CurSeqNum {
+			fmt.Printf("[ INFO ] received Ack %d SeqNum %d\n", m.AckNum, m.SeqNum)
 			s.udp.SetDeadline(time.Time{})
 			return toRealS(n), nil
 		}
-		fmt.Printf("[ ERROR ] expected Ack %d, but actual Ack %d\n", msg.AckNum, s.CurAckNum)
+		if m.AckNum != s.CurAckNum {
+			fmt.Printf("[ ERROR ] expected Ack %d, but actual Ack %d\n", s.CurAckNum, m.AckNum)
+		}
+		if s.CurSeqNum != m.SeqNum {
+			fmt.Printf("[ ERROR ] expected SeqNum %d, but actual SeqNum %d\n", s.CurSeqNum, m.SeqNum)
+		}
 	}
 }
 
@@ -135,7 +218,7 @@ func toRealS(s int) int {
 
 func (s *Sender) internalWrite(p []byte, addr net.Addr) (int, error) {
 	if rand.Float32() < common.PacketLoss {
-		fmt.Printf("[ INFO ] lost Ack %d\n", s.CurAckNum)
+		fmt.Printf("[ INFO ] lost Ack %d SeqNum %d\n", s.CurAckNum, s.CurSeqNum)
 		return len(p), nil
 	}
 	s.udp.SetDeadline(time.Now().Add(s.timeout))
@@ -143,7 +226,7 @@ func (s *Sender) internalWrite(p []byte, addr net.Addr) (int, error) {
 	if n < common.HeaderSize {
 		return n, fmt.Errorf("%w: %w", common.ErrHeader, err)
 	}
-	fmt.Printf("[ INFO ] sent Ack %d\n", s.CurAckNum)
+	fmt.Printf("[ INFO ] sent Ack %d SeqNum %d\n", s.CurAckNum, s.CurSeqNum)
 	return n, err
 }
 
