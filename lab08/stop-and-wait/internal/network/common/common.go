@@ -4,14 +4,15 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"sync"
 )
 
 const (
-	PacketSize = 2048 // 1024 bytes
-	PacketLoss = 0.8  // 0 <= probability <= 1
+	PacketSize = 1024 // 1024 bytes
+	PacketLoss = 0.3  // 0 <= probability <= 1
 	HeaderSize = 9    // 9 bytes
 )
 
@@ -296,4 +297,20 @@ func exitIfNotNil(err error) {
 		fmt.Print(err)
 		os.Exit(1)
 	}
+}
+
+func ToChecksum(data []byte) uint16 {
+	var cs uint16 = 0
+	for len(data) != 0 {
+		if len(data) > 1 {
+			cs += binary.BigEndian.Uint16(data)
+		} else {
+			cs += uint16(data[0])
+		}
+	}
+	return cs ^ math.MaxUint16
+}
+
+func CheckChecksum(data []byte, checksum uint16) bool {
+	return (ToChecksum(data) | checksum) == math.MaxUint16
 }
