@@ -130,6 +130,7 @@ func (s *Sender) Write(p []byte, fin byte) (int, error) {
 			if errors.Is(err, ErrHeader) {
 				continue
 			}
+			s.udp.SetDeadline(time.Time{})
 			return 0, err
 		}
 
@@ -140,6 +141,7 @@ func (s *Sender) Write(p []byte, fin byte) (int, error) {
 
 		if m.AckNum == msg.AckNum && m.SeqNum == s.CurSeqNum {
 			fmt.Printf("[ INFO ] received Ack %d\n", msg.AckNum)
+			s.udp.SetDeadline(time.Time{})
 			return toRealS(n), nil
 		}
 		fmt.Printf("[ ERROR ] expected Ack %d, but actual Ack %d\n", msg.AckNum, s.CurAckNum)
@@ -160,7 +162,7 @@ func (s *Sender) internalWrite(p []byte) (int, error) {
 		fmt.Printf("[ INFO ] lost Ack %d\n", s.CurAckNum)
 		return len(p), nil
 	}
-	s.udp.SetDeadline(time.Now().Add(s.timeout))
+	s.udp.SetWriteDeadline(time.Now().Add(s.timeout))
 	n, err := s.udp.Write(p)
 	if n < HeaderSize {
 		return n, fmt.Errorf("%w: %w", ErrHeader, err)
@@ -170,7 +172,7 @@ func (s *Sender) internalWrite(p []byte) (int, error) {
 }
 
 func (s *Sender) internalRead(p []byte) (int, error) {
-	s.udp.SetDeadline(time.Now().Add(s.timeout))
+	s.udp.SetReadDeadline(time.Now().Add(s.timeout))
 	n, err := s.udp.Read(p)
 	if errors.Is(err, os.ErrDeadlineExceeded) {
 		fmt.Println("[ ERROR ] timeout")
@@ -191,7 +193,7 @@ func NewReader(udp *net.UDPConn) *Reader {
 	return &Reader{udp, 0, 0}
 }
 
-func (r *Reader) Read(p []byte) (int, byte, error) {
+func (r *Reader) Read(p []byte) (int, byte, net.Addr, error) {
 	tmpBuff := make([]byte, HeaderSize+PacketSize)
 	for {
 		n, addr, err := r.internalRead(tmpBuff)
@@ -214,7 +216,7 @@ func (r *Reader) Read(p []byte) (int, byte, error) {
 			for i := range m.Length {
 				p[i] = m.Payload[i]
 			}
-			return n, m.Fin, nil
+			return n, m.Fin, addr, nil
 		}
 
 		r.internalWriteAck(addr)

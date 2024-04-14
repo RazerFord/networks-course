@@ -7,24 +7,29 @@ import (
 	"io/fs"
 	"os"
 	"stop-and-wait/internal/network/server"
+	"time"
 )
 
 func main() {
 	addr := flag.String("address", "localhost", "server address")
 	port := flag.Int("port", 8888, "server port")
+	timeout := flag.Int64("timeout", 1000, "time-out")
 	file := flag.String("file", "", "file name")
 	flag.Parse()
 
-	s, err := server.Connect(*addr, *port)
+	s, err := server.Connect(*addr, *port, time.Duration(*timeout) * time.Millisecond)
 	exitIfNotNil(err)
 
 	buff := make([]byte, 4)
-	_, err = s.Read(buff)
+	_, _, err = s.Read(buff)
 	exitIfNotNil(err)
 
 	l := binary.BigEndian.Uint32(buff)
 	buff = make([]byte, l)
-	_, err = s.Read(buff)
+	_, a, err := s.Read(buff)
+	exitIfNotNil(err)
+
+	_, err = s.Write(buff, a)
 	exitIfNotNil(err)
 
 	os.WriteFile(*file, buff, fs.FileMode(0777))

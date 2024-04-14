@@ -29,6 +29,9 @@ func main() {
 
 	_, err = client.Write(p)
 	exitIfNotNil(err)
+
+	_, err = client.Read(p)
+	exitIfNotNil(err)
 }
 
 func exitIfNotNil(err error) {
