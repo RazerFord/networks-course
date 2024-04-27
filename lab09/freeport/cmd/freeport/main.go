@@ -11,11 +11,11 @@ const maxPort = 1 << 16 // :)
 func main() {
 	ip := flag.String("ip", "0.0.0.0", "ip address")
 	start := flag.Int("start", 0, "start of port ranges")
-	end := flag.Int("end", maxPort-1, "end of port range")
+	end := flag.Int("end", maxPort, "end of port range (excluding)")
 	flag.Parse()
 
 	ports := []int{}
-	for port := range *end - *start + 1 {
+	for port := range *end - *start {
 		port += *start
 
 		addr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", *ip, port))
